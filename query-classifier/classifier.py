@@ -119,13 +119,14 @@ class RuleBasedLegalClassifier:
         }
         
         
-classifier = RuleBasedLegalClassifier(
-    category_keywords=category_keywords,
-    low_confidence_threshold=0.02,
-    ambiguity_margin=0.04
-)
+if __name__ == "__main__":
+    classifier = RuleBasedLegalClassifier(
+        category_keywords=category_keywords,
+        low_confidence_threshold=0.02,
+        ambiguity_margin=0.04
+    )
 
-queries = [
+    queries = [
     # base
     "I slipped on a wet floor at the grocery store and hurt my back badly.",
     
@@ -145,11 +146,11 @@ queries = [
     "My boss threatened wrongful termination over my copyright software, and then I was injured at the store, leaving me with medical bills."
 ]
 
-for q in queries:
-    result = classifier.classify(q)
-    print("-----------------------------------------------------------------------------")
-    print(q)
-    pprint.pprint(result)
+    for q in queries:
+        result = classifier.classify(q)
+        print("-----------------------------------------------------------------------------")
+        print(q)
+        pprint.pprint(result)
     
     
     
