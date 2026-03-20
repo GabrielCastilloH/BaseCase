@@ -1,63 +1,122 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import SearchIcon from './assets/mag.png'
-import { Episode } from './types'
-import Chat from './Chat'
+import { LegalCase, SearchResponse } from './types'
+
+function categoryClass(cat: string): string {
+  const c = cat.toLowerCase()
+  if (c.includes('personal injury') || c.includes('personal_injury')) return 'injury'
+  if (c.includes('employment') || c.includes('employment_labor')) return 'employment'
+  if (c.includes('copyright')) return 'copyright'
+  return 'default'
+}
+
+const PILL_CATEGORIES = [
+  { label: 'Personal Injury', key: 'personal_injury',  cls: 'injury' },
+  { label: 'Employment Law',  key: 'employment_labor', cls: 'employment' },
+  { label: 'Copyright',       key: 'copyright',        cls: 'copyright' },
+]
 
 function App(): JSX.Element {
-  const [useLlm, setUseLlm] = useState<boolean | null>(null)
   const [searchTerm, setSearchTerm] = useState<string>('')
-  const [episodes, setEpisodes] = useState<Episode[]>([])
+  const [results, setResults] = useState<LegalCase[]>([])
+  const [detectedCategory, setDetectedCategory] = useState<string | null>(null)
+  const [confidence, setConfidence] = useState<number | null>(null)
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
 
-  useEffect(() => {
-    fetch('/api/config').then(r => r.json()).then(data => setUseLlm(data.use_llm))
-  }, [])
-
-  const handleSearch = async (value: string): Promise<void> => {
-    setSearchTerm(value)
-    if (value.trim() === '') { setEpisodes([]); return }
-    const response = await fetch(`/api/episodes?title=${encodeURIComponent(value)}`)
-    const data: Episode[] = await response.json()
-    setEpisodes(data)
+  const fetchResults = async (q: string, category: string | null): Promise<void> => {
+    const params = new URLSearchParams()
+    if (q.trim()) params.set('q', q)
+    if (category) params.set('category', category)
+    const response = await fetch(`/api/search?${params.toString()}`)
+    const data: SearchResponse = await response.json()
+    setResults(data.results)
+    setDetectedCategory(data.detected_category)
+    setConfidence(data.confidence)
   }
 
-  if (useLlm === null) return <></>
+  useEffect(() => { fetchResults('', null) }, [])
+
+  const handleSearch = (value: string): void => {
+    setSearchTerm(value)
+    fetchResults(value, activeCategory)
+    if (!value.trim()) setDetectedCategory(null)
+  }
+
+  const handlePillClick = (key: string): void => {
+    const next = activeCategory === key ? null : key
+    setActiveCategory(next)
+    fetchResults(searchTerm, next)
+  }
 
   return (
-    <div className={`full-body-container ${useLlm ? 'llm-mode' : ''}`}>
-      {/* Search bar (always shown) */}
-      <div className="top-text">
-        <div className="google-colors">
-          <h1 id="google-4">4</h1>
-          <h1 id="google-3">3</h1>
-          <h1 id="google-0-1">0</h1>
-          <h1 id="google-0-2">0</h1>
+    <>
+      <header className="site-header">
+        <span className="site-title">BaseCase</span>
+      </header>
+
+      <main className="main-content">
+        <div className="disclaimer-banner">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'middle', marginRight:'0.4rem', flexShrink:0}}>
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          This tool provides legal information only — not formal legal advice.
         </div>
-        <div className="input-box" onClick={() => document.getElementById('search-input')?.focus()}>
-          <img src={SearchIcon} alt="search" />
+
+        <div className="category-pills">
+          {PILL_CATEGORIES.map(({ label, key, cls }) => (
+            <span
+              key={key}
+              className={`pill pill-${cls}${activeCategory === key ? ' pill-active' : ''}`}
+              onClick={() => handlePillClick(key)}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+
+        <div className="search-row">
+          <img src={SearchIcon} alt="" className="search-icon" />
           <input
-            id="search-input"
-            placeholder="Search for a Keeping up with the Kardashians episode"
+            placeholder="Describe your legal situation…"
             value={searchTerm}
             onChange={(e) => handleSearch(e.target.value)}
+            autoFocus
           />
         </div>
-      </div>
 
-      {/* Search results (always shown) */}
-      <div id="answer-box">
-        {episodes.map((episode, index) => (
-          <div key={index} className="episode-item">
-            <h3 className="episode-title">{episode.title}</h3>
-            <p className="episode-desc">{episode.descr}</p>
-            <p className="episode-rating">IMDB Rating: {episode.imdb_rating}</p>
-          </div>
-        ))}
-      </div>
+        {detectedCategory && (
+          <p className="detected-category">
+            detected area: <strong>{detectedCategory}</strong>
+            {confidence !== null && (
+              <span className="confidence"> — {(confidence * 100).toFixed(0)}% confidence</span>
+            )}
+          </p>
+        )}
 
-      {/* Chat (only when USE_LLM = True in routes.py) */}
-      {useLlm && <Chat onSearchTerm={handleSearch} />}
-    </div>
+        <div className="results-list">
+          {results.map((c, i) => {
+            const cat = categoryClass(c.category)
+            return (
+              <div key={i} className={`result-card cat-${cat}`}>
+                <div className="result-meta">
+                  <span className={`category-badge badge-${cat}`}>{c.category.replace('_', ' ')}</span>
+                  <span className="similarity-score">match: {(c.similarity * 100).toFixed(0)}%</span>
+                </div>
+                <h3 className="result-title">{c.case_name}</h3>
+                <p className="result-snippet">{c.snippet}</p>
+                {c.url && (
+                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="result-link">
+                    view on CourtListener →
+                  </a>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </main>
+    </>
   )
 }
 
