@@ -1,35 +1,22 @@
 :root {
-  /* Background */
-  --color-page-bg:           #f3f4f4;
-  --color-card-bg:           #ffffff;
-
-  /* Header */
-  --color-header-bg:         #612d53;
-  --color-header-text:       #f3f4f4;
-  --color-header-subtext:    #c49aaf;
-
-  /* Text */
-  --color-text-primary:      #2c2c2c;
-  --color-text-secondary:    #5e5e5e;
-  --color-text-muted:        #9a9a9a;
-
-  /* Borders */
-  --color-border:            #d8ced4;
-  --color-border-light:      #ece6e9;
-
-  /* Accent */
-  --color-accent:            #853953;
-  --color-accent-hover:      #612d53;
-
-  /* Categories */
-  --color-injury:            #9b4f2e;
-  --color-employment:        #3d5a7a;
-  --color-copyright:         #4a6b52;
-
-  /* Disclaimer */
-  --color-disclaimer-bg:     #f9f0f3;
+  --color-page-bg: #f3f4f4;
+  --color-card-bg: #ffffff;
+  --color-header-bg: #612d53;
+  --color-header-text: #f3f4f4;
+  --color-header-subtext: #c49aaf;
+  --color-text-primary: #2c2c2c;
+  --color-text-secondary: #5e5e5e;
+  --color-text-muted: #9a9a9a;
+  --color-border: #d8ced4;
+  --color-border-light: #ece6e9;
+  --color-accent: #853953;
+  --color-accent-hover: #612d53;
+  --color-injury: #9b4f2e;
+  --color-employment: #3d5a7a;
+  --color-copyright: #4a6b52;
+  --color-disclaimer-bg: #f9f0f3;
   --color-disclaimer-border: #c49aaf;
-  --color-disclaimer-text:   #612d53;
+  --color-disclaimer-text: #612d53;
 }
 
 *, *::before, *::after {
@@ -43,8 +30,6 @@ body {
   background-color: var(--color-page-bg);
   color: var(--color-text-primary);
 }
-
-/* ── Header ─────────────────────────────────────────────────────────────────── */
 
 .site-header {
   background-color: var(--color-header-bg);
@@ -69,15 +54,11 @@ body {
   letter-spacing: 0.04em;
 }
 
-/* ── Main layout ─────────────────────────────────────────────────────────────── */
-
 .main-content {
   max-width: 760px;
   margin: 0 auto;
   padding: 2.5rem 1.5rem 4rem;
 }
-
-/* ── Disclaimer ──────────────────────────────────────────────────────────────── */
 
 .disclaimer-banner {
   display: flex;
@@ -90,8 +71,6 @@ body {
   margin-bottom: 1.75rem;
   letter-spacing: 0.02em;
 }
-
-/* ── Category pills ──────────────────────────────────────────────────────────── */
 
 .category-pills {
   display: flex;
@@ -110,11 +89,9 @@ body {
   text-transform: uppercase;
 }
 
-.pill-injury     { color: var(--color-injury);     border-color: var(--color-injury); }
+.pill-injury { color: var(--color-injury); border-color: var(--color-injury); }
 .pill-employment { color: var(--color-employment); border-color: var(--color-employment); }
-.pill-copyright  { color: var(--color-copyright);  border-color: var(--color-copyright); }
-
-/* ── Search box ──────────────────────────────────────────────────────────────── */
+.pill-copyright { color: var(--color-copyright); border-color: var(--color-copyright); }
 
 .search-row {
   display: flex;
@@ -152,8 +129,6 @@ body {
   flex-shrink: 0;
 }
 
-/* ── Detected category ────────────────────────────────────────────────────────── */
-
 .detected-category {
   font-size: 0.78rem;
   color: var(--color-text-secondary);
@@ -169,8 +144,6 @@ body {
   color: var(--color-text-muted);
 }
 
-/* ── Result cards ─────────────────────────────────────────────────────────────── */
-
 .results-list {
   display: flex;
   flex-direction: column;
@@ -184,9 +157,9 @@ body {
   padding: 1.1rem 1.25rem;
 }
 
-.result-card.cat-injury     { border-left-color: var(--color-injury); }
+.result-card.cat-injury { border-left-color: var(--color-injury); }
 .result-card.cat-employment { border-left-color: var(--color-employment); }
-.result-card.cat-copyright  { border-left-color: var(--color-copyright); }
+.result-card.cat-copyright { border-left-color: var(--color-copyright); }
 
 .result-meta {
   display: flex;
@@ -204,10 +177,10 @@ body {
   border: 1px solid currentColor;
 }
 
-.badge-injury     { color: var(--color-injury); }
+.badge-injury { color: var(--color-injury); }
 .badge-employment { color: var(--color-employment); }
-.badge-copyright  { color: var(--color-copyright); }
-.badge-default    { color: var(--color-text-muted); }
+.badge-copyright { color: var(--color-copyright); }
+.badge-default { color: var(--color-text-muted); }
 
 .similarity-score {
   font-size: 0.72rem;
@@ -241,8 +214,6 @@ body {
   text-decoration: underline;
   color: var(--color-accent-hover);
 }
-
-/* ── Responsive ──────────────────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {
   .site-header { padding: 1rem; }
