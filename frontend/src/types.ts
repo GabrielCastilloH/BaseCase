@@ -8,10 +8,25 @@ export interface LegalCase {
   why?: string[]
 }
 
+/** Classifier + routing; `needs_user_category` only for low_confidence (pick pills) */
+export interface ClassificationInfo {
+  status:
+    | 'ok'
+    | 'ambiguous'
+    | 'low_confidence'
+    | 'no_match'
+    | 'browse'
+    | 'user_selected'
+  needs_user_category: boolean
+  reason: string | null
+  candidates: Array<{ key: string; label: string; score: number }>
+}
+
 export interface SearchResponse {
   results: LegalCase[]
   detected_category: string | null
   confidence: number | null
   /** Top latent semantic dimensions for the query (SVD explainability) */
   activated_dimensions?: string[]
+  classification?: ClassificationInfo
 }
