@@ -65,7 +65,7 @@ def _query_svd_vector(q: str):
 
 
 def _activated_dimension_labels(query_svd: np.ndarray, top_n: int = 3):
-    """Top latent dimensions by |activation| for query-level explainability."""
+    """Top latent dimensions by |activation|, with +/- sign, for query-level explainability."""
     vec = query_svd[0]
     order = np.argsort(np.abs(vec))[::-1]
     labels = []
@@ -74,21 +74,29 @@ def _activated_dimension_labels(query_svd: np.ndarray, top_n: int = 3):
             continue
         if len(labels) >= top_n:
             break
-        labels.append(DIMENSION_LABELS.get(d, f"Dimension {d}"))
+        sign = '+' if vec[d] >= 0 else '-'
+        labels.append(f"({sign}) {DIMENSION_LABELS.get(d, f'Dimension {d}')}")
     return labels
 
 
 def _per_result_why(query_svd: np.ndarray, doc_vec: np.ndarray, top_n: int = 3):
-    """Dimensions where both query AND document have high activation (shared latent themes)."""
-    shared = np.abs(query_svd[0]) * np.abs(doc_vec)
-    order = np.argsort(shared)[::-1]
+    """Dimensions with highest shared activation magnitude between query and document.
+
+    Sign prefix shows whether both activate the dimension in the same direction (+)
+    or opposite directions (-), matching the contribution to cosine similarity.
+    """
+    q_vec = query_svd[0]
+    # element-wise product: positive = same direction, negative = opposing
+    product = q_vec * doc_vec
+    order = np.argsort(np.abs(product))[::-1]
     labels = []
     for d in order:
         if d >= _n_label_dims:
             continue
         if len(labels) >= top_n:
             break
-        labels.append(DIMENSION_LABELS.get(d, f"Dimension {d}"))
+        sign = '+' if product[d] >= 0 else '-'
+        labels.append(f"({sign}) {DIMENSION_LABELS.get(d, f'Dimension {d}')}")
     return labels
 
 
