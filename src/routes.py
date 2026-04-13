@@ -171,7 +171,8 @@ def register_routes(app):
         else:
             result = CLASSIFIER.classify(q)
             detected_category = result.get("category")
-            confidence = result.get("score")
+            raw_conf = result.get("score")
+            confidence = raw_conf if isinstance(raw_conf, (int, float)) else None
 
         # filter by category
         if detected_category and detected_category in CATEGORY_MAP:
