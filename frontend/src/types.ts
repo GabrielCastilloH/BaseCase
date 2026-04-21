@@ -52,3 +52,24 @@ export interface CaseRagState {
   error: string | null
   expanded: boolean
 }
+
+export interface DeepDiveMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface CaseRagChatRequest {
+  case_idx?: number
+  case_name?: string
+  user_query: string
+  snippet?: string
+  messages: DeepDiveMessage[]
+}
+
+export interface DeepDiveState {
+  open: boolean
+  loading: boolean
+  error: string | null
+  messages: DeepDiveMessage[]
+  draft: string
+}
