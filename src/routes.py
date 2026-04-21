@@ -11,6 +11,8 @@ from sklearn.preprocessing import normalize
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'query-classifier'))
 from classifier import RuleBasedLegalClassifier
 from keywords import category_keywords
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'llmRAG'))
+from rag import run_case_rag
 
 cases_path = os.path.join(os.path.dirname(__file__), 'cases.json')
 with open(cases_path) as f:
@@ -84,6 +86,46 @@ def _human_labels_for_keys(keys):
     if not keys:
         return None
     return ", ".join(CATEGORY_LABELS.get(k, k) for k in keys)
+
+
+def _normalize_title(s: str) -> str:
+    return " ".join((s or "").strip().lower().split())
+
+
+def _resolve_case_by_name(case_name: str):
+    """
+    Find authoritative case payload from CASES by title.
+    Tries exact match first, then normalized equality, then substring fallback.
+    """
+    raw = (case_name or "").strip()
+    if not raw:
+        return None
+
+    for case in CASES:
+        if (case.get("case_name") or "") == raw:
+            return case
+
+    wanted = _normalize_title(raw)
+    for case in CASES:
+        if _normalize_title(case.get("case_name") or "") == wanted:
+            return case
+
+    for case in CASES:
+        c_name = (case.get("case_name") or "")
+        c_norm = _normalize_title(c_name)
+        if wanted and (wanted in c_norm or c_norm in wanted):
+            return case
+    return None
+
+
+def _resolve_case_by_idx(case_idx):
+    try:
+        i = int(case_idx)
+    except (TypeError, ValueError):
+        return None
+    if i < 0 or i >= len(CASES):
+        return None
+    return CASES[i]
 
 
 def _serialize_classification(
@@ -278,10 +320,11 @@ def register_routes(app):
             if user_cat_keys:
                 allow = set(user_cat_keys)
                 category_cases = [
-                    c for c in CASES
+                    (i, c) for i, c in enumerate(CASES)
                     if c.get("category", "") in allow
                 ]
                 hits = [{
+                    "case_idx": i,
                     "case_name": c["case_name"],
                     "category": c.get("category", ""),
                     "similarity": 1.0,
@@ -289,7 +332,7 @@ def register_routes(app):
                     "snippet_is_excerpt": False,
                     "url": c.get("url", ""),
                     "why": [],
-                } for c in category_cases]
+                } for i, c in category_cases]
                 return jsonify({
                     "results": hits,
                     "detected_category": _human_labels_for_keys(user_cat_keys),
@@ -304,6 +347,7 @@ def register_routes(app):
                 })
             # No query, no category — return all cases as default browse
             hits = [{
+                "case_idx": i,
                 "case_name": c["case_name"],
                 "category": c.get("category", ""),
                 "similarity": 1.0,
@@ -311,7 +355,7 @@ def register_routes(app):
                 "snippet_is_excerpt": False,
                 "url": c.get("url", ""),
                 "why": [],
-            } for c in CASES]
+            } for i, c in enumerate(CASES)]
             return jsonify({
                 "results": hits,
                 "detected_category": None,
@@ -422,6 +466,7 @@ def register_routes(app):
             doc_svd = np.asarray(SVD_MATRIX[global_idx]).reshape(-1)
             why_hit = _per_hit_latent_overlap_labels(query_svd[0], doc_svd, top_n=3)
             hits.append({
+                "case_idx": global_idx,
                 "case_name": case["case_name"],
                 "category": case.get("category", ""),
                 "similarity": round(float(sims[local_idx]), 4),
@@ -444,6 +489,34 @@ def register_routes(app):
         q = request.args.get("title", request.args.get("q", ""))
         from flask import redirect
         return redirect(f"/api/search?q={q}")
+
+    @app.route("/api/case-rag", methods=["POST"])
+    def case_rag():
+        payload = request.get_json(silent=True) or {}
+        user_query = (payload.get("user_query") or "").strip()
+        case_name = (payload.get("case_name") or "").strip()
+        case_idx = payload.get("case_idx")
+
+        if not user_query:
+            return jsonify({"error": "Missing required field: user_query"}), 400
+        if case_idx is None and not case_name:
+            return jsonify({"error": "Missing required field: case_idx or case_name"}), 400
+
+        case = _resolve_case_by_idx(case_idx)
+        if not case and case_name:
+            case = _resolve_case_by_name(case_name)
+        if not case:
+            return jsonify({"error": "Case not found for provided identifier"}), 404
+
+        case_context = (case.get("text") or "").strip()
+        if not case_context:
+            return jsonify({"error": "Selected case has no opinion text"}), 422
+
+        answer = run_case_rag(user_query, case_context, case.get("case_name") or case_name)
+        return jsonify({
+            "answer": answer,
+            "case_name": case.get("case_name") or case_name,
+        })
 
     @app.route("/api/config")
     def config():
