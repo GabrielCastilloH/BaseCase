@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import SearchIcon from './assets/mag.png'
-import { ClassificationInfo, LegalCase, SearchResponse } from './types'
+import { CaseRagRequest, CaseRagResponse, CaseRagState, ClassificationInfo, LegalCase, SearchResponse } from './types'
 
 function categoryClass(cat: string): string {
   const c = cat.toLowerCase()
@@ -19,6 +19,16 @@ const PILL_CATEGORIES = [
 
 /** Max textarea height (px); beyond this, content scrolls inside the box */
 const SEARCH_INPUT_MAX_HEIGHT_PX = 176
+const EMPTY_RAG_STATE: CaseRagState = {
+  loading: false,
+  answer: null,
+  error: null,
+  expanded: false,
+}
+
+function resultKey(c: LegalCase, idx: number): string {
+  return `${c.case_name}::${idx}`
+}
 
 function App(): JSX.Element {
   const [searchTerm, setSearchTerm] = useState<string>('')
@@ -28,6 +38,7 @@ function App(): JSX.Element {
   const [activatedDimensions, setActivatedDimensions] = useState<string[]>([])
   const [activeCategories, setActiveCategories] = useState<string[]>([])
   const [classification, setClassification] = useState<ClassificationInfo | null>(null)
+  const [ragByResult, setRagByResult] = useState<Record<string, CaseRagState>>({})
   const searchInputRef = useRef<HTMLTextAreaElement>(null)
 
   const fetchResults = async (q: string, categories: string[]): Promise<void> => {
@@ -39,10 +50,55 @@ function App(): JSX.Element {
     const response = await fetch(`/api/search?${params.toString()}`)
     const data: SearchResponse = await response.json()
     setResults(data.results)
+    setRagByResult({})
     setDetectedCategory(data.detected_category)
     setConfidence(data.confidence)
     setActivatedDimensions(data.activated_dimensions ?? [])
     setClassification(data.classification ?? null)
+  }
+
+  const handleRunRag = async (c: LegalCase, idx: number): Promise<void> => {
+    const key = resultKey(c, idx)
+    setRagByResult((prev) => ({
+      ...prev,
+      [key]: { ...(prev[key] ?? EMPTY_RAG_STATE), loading: true, error: null, expanded: true },
+    }))
+
+    try {
+      const payload: CaseRagRequest = {
+        user_query: searchTerm.trim(),
+        case_name: c.case_name,
+        case_idx: c.case_idx,
+      }
+      const response = await fetch('/api/case-rag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data: CaseRagResponse = await response.json()
+      if (!response.ok || !data.answer) {
+        throw new Error(data.error ?? 'Could not generate response for this case.')
+      }
+      setRagByResult((prev) => ({
+        ...prev,
+        [key]: { loading: false, answer: data.answer ?? null, error: null, expanded: true },
+      }))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not generate response for this case.'
+      setRagByResult((prev) => ({
+        ...prev,
+        [key]: { ...(prev[key] ?? EMPTY_RAG_STATE), loading: false, error: message, expanded: true },
+      }))
+    }
+  }
+
+  const toggleRagPanel = (c: LegalCase, idx: number): void => {
+    const key = resultKey(c, idx)
+    setRagByResult((prev) => {
+      const current = prev[key]
+      if (!current) return prev
+      return { ...prev, [key]: { ...current, expanded: !current.expanded } }
+    })
   }
 
   useEffect(() => { fetchResults('', []) }, [])
@@ -170,6 +226,9 @@ function App(): JSX.Element {
         <div className="results-list">
           {results.map((c, i) => {
             const cat = categoryClass(c.category)
+            const cardKey = resultKey(c, i)
+            const ragState = ragByResult[cardKey] ?? EMPTY_RAG_STATE
+            const hasGenerated = Boolean(ragState.answer || ragState.error)
             return (
               <div key={i} className={`result-card cat-${cat}`}>
                 <div className="result-meta">
@@ -195,6 +254,37 @@ function App(): JSX.Element {
                   <a href={c.url} target="_blank" rel="noopener noreferrer" className="result-link">
                     view on CourtListener →
                   </a>
+                )}
+                <div className="rag-actions">
+                  <button
+                    type="button"
+                    className="rag-btn"
+                    disabled={ragState.loading || !searchTerm.trim()}
+                    onClick={() => handleRunRag(c, i)}
+                  >
+                    {ragState.loading ? 'Generating...' : hasGenerated ? 'Regenerate' : 'Run RAG'}
+                  </button>
+                  {hasGenerated && (
+                    <button
+                      type="button"
+                      className="rag-toggle-btn"
+                      onClick={() => toggleRagPanel(c, i)}
+                    >
+                      {ragState.expanded ? 'Hide' : 'Show'}
+                    </button>
+                  )}
+                </div>
+                {!searchTerm.trim() && (
+                  <p className="rag-hint">Enter a query to run case-level RAG.</p>
+                )}
+                {ragState.expanded && (ragState.answer || ragState.error) && (
+                  <div className="rag-panel" role="status" aria-live="polite">
+                    {ragState.error ? (
+                      <p className="rag-error">{ragState.error}</p>
+                    ) : (
+                      <pre className="rag-answer">{ragState.answer}</pre>
+                    )}
+                  </div>
                 )}
               </div>
             )

@@ -334,6 +334,64 @@ body {
   color: var(--color-accent-hover);
 }
 
+.rag-actions {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  margin-top: 0.65rem;
+}
+
+.rag-btn,
+.rag-toggle-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-text-primary);
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+}
+
+.rag-btn {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.rag-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rag-hint {
+  font-size: 0.66rem;
+  margin-top: 0.35rem;
+  color: var(--color-text-muted);
+}
+
+.rag-panel {
+  margin-top: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  background: #faf8fa;
+  border: 1px solid var(--color-border-light);
+  border-left: 3px solid var(--color-accent);
+}
+
+.rag-answer {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+}
+
+.rag-error {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #9b2d2d;
+}
+
 @media (max-width: 600px) {
   .site-header { padding: 1rem; }
   .main-content { padding: 1.5rem 1rem 3rem; }

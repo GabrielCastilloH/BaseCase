@@ -1,4 +1,5 @@
 export interface LegalCase {
+  case_idx?: number
   case_name: string
   category: string
   similarity: number
@@ -31,4 +32,23 @@ export interface SearchResponse {
   /** Top latent semantic dimensions for the query (SVD explainability) */
   activated_dimensions?: string[]
   classification?: ClassificationInfo
+}
+
+export interface CaseRagRequest {
+  user_query: string
+  case_name: string
+  case_idx?: number
+}
+
+export interface CaseRagResponse {
+  answer?: string
+  case_name?: string
+  error?: string
+}
+
+export interface CaseRagState {
+  loading: boolean
+  answer: string | null
+  error: string | null
+  expanded: boolean
 }
