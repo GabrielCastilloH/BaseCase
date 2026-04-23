@@ -564,12 +564,25 @@ function App(): JSX.Element {
               >
                 <div className="result-meta">
                   <span className={`category-badge badge-${cat}`}>{c.category.replace('_', ' ')}</span>
+                  {useLlm && (
+                    <button
+                      type="button"
+                      className="rag-btn rag-btn-meta"
+                      disabled={ragState.loading || !searchTerm.trim()}
+                      onClick={() => handleRunRag(c, i)}
+                    >
+                      {ragState.loading ? 'Generating...' : hasGenerated ? 'Regenerate' : 'Analyze Case'}
+                    </button>
+                  )}
+                  {c.url && (
+                    <a href={c.url} target="_blank" rel="noopener noreferrer" className="result-link result-link-meta">
+                      see full case →
+                    </a>
+                  )}
                   <span className="similarity-score">match: {(c.similarity * 100).toFixed(0)}%</span>
                 </div>
                 <h3 className="result-title">{c.case_name}</h3>
-                {c.snippet_is_excerpt && (
-                  <p className="snippet-excerpt-hint">Excerpt aligned to your search</p>
-                )}
+
                 <p className="result-snippet">{c.snippet}</p>
                 {c.why && c.why.length > 0 && (
                   <div className="why-this-result">
@@ -590,48 +603,35 @@ function App(): JSX.Element {
                     </div>
                   </div>
                 )}
-                {c.url && (
-                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="result-link">
-                    view on CourtListener →
-                  </a>
-                )}
-                {useLlm && (
-                  <div className="rag-actions">
-                    <button
-                      type="button"
-                      className="rag-btn"
-                      disabled={ragState.loading || !searchTerm.trim()}
-                      onClick={() => handleRunRag(c, i)}
-                    >
-                      {ragState.loading ? 'Generating...' : hasGenerated ? 'Regenerate' : 'Analyze Case'}
-                    </button>
-                    {hasGenerated && (
-                      <button
-                        type="button"
-                        className="rag-toggle-btn"
-                        onClick={() => toggleRagPanel(c, i)}
-                      >
-                        {ragState.expanded ? 'Hide' : 'Show'}
-                      </button>
-                    )}
-                    {ragState.answer && (
-                      <button
-                        type="button"
-                        className="rag-toggle-btn"
-                        onClick={() => (diveState.open ? closeDeepDive(c, i) : openDeepDive(c, i))}
-                      >
-                        {diveState.open ? 'Close Deep Dive' : 'Deep Dive'}
-                      </button>
-                    )}
-                  </div>
-                )}
-                {ragState.expanded && (ragState.answer || ragState.error) && (
-                  <div className="rag-panel" role="status" aria-live="polite">
-                    {ragState.error ? (
-                      <p className="rag-error">{ragState.error}</p>
-                    ) : (
-                      <div className="rag-answer">
-                        <ReactMarkdown>{ragState.answer ?? ''}</ReactMarkdown>
+                {(ragState.answer || ragState.error) && (
+                  <div className="case-analysis" role="status" aria-live="polite">
+                    <div className="case-analysis-header" onClick={() => toggleRagPanel(c, i)}>
+                      <span className="case-analysis-title">
+                        <span className="case-analysis-chevron">{ragState.expanded ? '▼' : '▶'}</span>
+                        Case Analysis
+                      </span>
+                      {ragState.answer && (
+                        <button
+                          type="button"
+                          className="deep-dive-trigger"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            diveState.open ? closeDeepDive(c, i) : openDeepDive(c, i)
+                          }}
+                        >
+                          {diveState.open ? 'Close Deep Dive' : 'Deep Dive →'}
+                        </button>
+                      )}
+                    </div>
+                    {ragState.expanded && (
+                      <div className="rag-panel">
+                        {ragState.error ? (
+                          <p className="rag-error">{ragState.error}</p>
+                        ) : (
+                          <div className="rag-answer">
+                            <ReactMarkdown>{ragState.answer ?? ''}</ReactMarkdown>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

@@ -347,12 +347,14 @@ body {
 
 .result-meta {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  align-items: stretch;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
 .category-badge {
+  display: flex;
+  align-items: center;
   font-size: 0.65rem;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -370,6 +372,8 @@ body {
   font-size: 0.72rem;
   color: var(--color-text-muted);
   margin-left: auto;
+  display: flex;
+  align-items: center;
 }
 
 .result-title {
@@ -407,6 +411,27 @@ body {
   color: var(--color-accent-hover);
 }
 
+.rag-btn-meta {
+  display: flex;
+  align-items: center;
+  padding: 0 0.4rem;
+  font-size: 0.63rem;
+}
+
+.rag-toggle-btn-meta {
+  display: flex;
+  align-items: center;
+  padding: 0 0.4rem;
+  font-size: 0.63rem;
+}
+
+.result-link-meta {
+  display: flex;
+  align-items: center;
+  font-size: 0.63rem;
+  white-space: nowrap;
+}
+
 .rag-actions {
   display: flex;
   gap: 0.45rem;
@@ -442,12 +467,62 @@ body {
   color: var(--color-text-muted);
 }
 
-.rag-panel {
-  margin-top: 0.65rem;
-  padding: 0.6rem 0.75rem;
-  background: #faf8fa;
+.case-analysis {
+  margin-top: 0.75rem;
   border: 1px solid var(--color-border-light);
   border-left: 3px solid var(--color-accent);
+}
+
+.case-analysis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  background: #faf8fa;
+  cursor: pointer;
+  user-select: none;
+}
+
+.case-analysis-header:hover {
+  background: #f3eef2;
+}
+
+.case-analysis-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.case-analysis-chevron {
+  font-size: 0.55rem;
+}
+
+.deep-dive-trigger {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.63rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--color-accent);
+  background: transparent;
+  color: var(--color-accent);
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.deep-dive-trigger:hover {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.rag-panel {
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid var(--color-border-light);
 }
 
 .rag-answer {
