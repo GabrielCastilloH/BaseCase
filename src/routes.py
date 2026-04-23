@@ -155,7 +155,7 @@ def _serialize_classification(
         key = c.get("category")
         if key not in CATEGORY_MAP:
             continue
-        score = c.get("score")
+        score = c.get("normalized_score") if "normalized_score" in c else c.get("score")
         try:
             score_f = round(float(score), 4)
         except (TypeError, ValueError):
@@ -417,7 +417,7 @@ def register_routes(app):
                 classification = _serialize_classification(
                     status="ok",
                     reason=result.get("reason"),
-                    candidates_raw=result.get("candidates"),
+                    candidates_raw=result.get("scores"),
                     needs_user_category=False,
                 )
                 human_category = CATEGORY_LABELS.get(detected_category)
@@ -432,7 +432,7 @@ def register_routes(app):
                     reason=(
                         "Several legal areas matched; results mix cases from each."
                     ),
-                    candidates_raw=result.get("candidates"),
+                    candidates_raw=result.get("scores"),
                     needs_user_category=False,
                 )
             elif status == "low_confidence":
@@ -446,7 +446,7 @@ def register_routes(app):
                         "Keyword signal is weak — select one or more categories "
                         "above to mix cases from those areas."
                     ),
-                    candidates_raw=result.get("candidates"),
+                    candidates_raw=result.get("scores"),
                     needs_user_category=True,
                 )
             else:
@@ -459,7 +459,7 @@ def register_routes(app):
                     reason=(
                         "Enter more detail, or select the legal areas you want above."
                     ),
-                    candidates_raw=result.get("candidates"),
+                    candidates_raw=result.get("scores"),
                     needs_user_category=True,
                 )
 
