@@ -615,6 +615,9 @@ body {
 }
 
 .synthesis-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.06em;
