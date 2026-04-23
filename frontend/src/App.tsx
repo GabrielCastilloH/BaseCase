@@ -55,64 +55,97 @@ function parseDimLine(line: string): { positive: boolean; label: string } {
 // The 10 named SVD dimensions — must match backend _DIMENSION_HUMAN_NAMES order
 const RADAR_N = 10
 const RADAR_KEYWORDS = ['General','Official','Administrative','Ohio','Federal','New','Employment','Medical','Copyright','Slip'] as const
-const RADAR_AXIS_LABELS = ['Gen. Litigation','Publications','Admin/Agency','Ohio Trial','Fed. Summary','New York','Employment','Medical','Copyright','Slip & Fall']
+const RADAR_SHORT_LABELS = ['Gen. Lit.','Pubs','Admin','Ohio','Fed.','NY','Employ.','Medical','Copyright','Slip/Fall']
+const RADAR_AXIS_LABELS  = ['Gen. Litigation','Publications','Admin/Agency','Ohio Trial','Fed. Summary','New York','Employment','Medical','Copyright','Slip & Fall']
 
 function dimToRadarIdx(label: string): number {
   const clean = label.replace(/\s*\([^)]*\)\s*$/, '').trim()
   return RADAR_KEYWORDS.findIndex(kw => clean.startsWith(kw))
 }
 
-function RadarChart({ dims, barWidthFn, size }: { dims: string[]; barWidthFn: (i: number) => number; size: number }): JSX.Element {
-  const cx = 50, cy = 50, r = 36
+function topIdxsFromLabels(dims: string[]): number[] {
+  const out: number[] = []
+  dims.forEach(dim => {
+    const raw = dim.replace(/^\([+-]\)\s*/, '')
+    const idx = dimToRadarIdx(raw)
+    if (idx >= 0) out.push(idx)
+  })
+  return out
+}
+
+function RadarChart({ values, topIdxs, size, showLabels = false }: {
+  values: number[]
+  topIdxs: number[]
+  size: number
+  showLabels?: boolean
+}): JSX.Element {
+  const vbox = showLabels ? 170 : 100
+  const cx = vbox / 2, cy = vbox / 2
+  const r = showLabels ? 54 : 36
+  const labelR = r * 1.3
+
   const angle = (i: number) => (i / RADAR_N) * 2 * Math.PI - Math.PI / 2
   const px = (i: number, v: number) => cx + v * r * Math.cos(angle(i))
   const py = (i: number, v: number) => cy + v * r * Math.sin(angle(i))
 
-  const values = new Array(RADAR_N).fill(0)
-  const topIdxs: number[] = []
-  dims.forEach((dim, j) => {
-    const raw = dim.replace(/^\([+-]\)\s*/, '')
-    const idx = dimToRadarIdx(raw)
-    if (idx >= 0) {
-      values[idx] = barWidthFn(j) / 100
-      topIdxs.push(idx)
-    }
-  })
-
-  const polyPts = values.map((v, i) => `${px(i, v).toFixed(2)},${py(i, v).toFixed(2)}`).join(' ')
+  const vals = Array.from({ length: RADAR_N }, (_, i) => values[i] ?? 0)
+  const polyPts = vals.map((v, i) => `${px(i, v).toFixed(2)},${py(i, v).toFixed(2)}`).join(' ')
 
   return (
-    <svg viewBox="0 0 100 100" width={size} height={size} className="radar-svg" aria-hidden="true">
-      {/* Background rings */}
+    <svg viewBox={`0 0 ${vbox} ${vbox}`} width={size} height={size} className="radar-svg" aria-hidden="true">
+      {/* Background rings — dashed inner, solid outer */}
       {[0.25, 0.5, 0.75, 1].map(ring => (
         <polygon
           key={ring}
           points={Array.from({ length: RADAR_N }, (_, i) => `${px(i, ring).toFixed(2)},${py(i, ring).toFixed(2)}`).join(' ')}
           fill="none"
-          stroke={ring === 1 ? '#c8bcc4' : '#ece6e9'}
-          strokeWidth={ring === 1 ? '0.8' : '0.4'}
+          stroke={ring === 1 ? '#c0b4ba' : '#e8e0e4'}
+          strokeWidth={ring === 1 ? '0.7' : '0.4'}
+          strokeDasharray={ring < 1 ? '2 2' : undefined}
         />
       ))}
       {/* Axis spokes */}
       {Array.from({ length: RADAR_N }, (_, i) => (
-        <line key={i} x1={cx} y1={cy} x2={px(i, 1).toFixed(2)} y2={py(i, 1).toFixed(2)} stroke="#ddd4d9" strokeWidth="0.4" />
+        <line key={i} x1={cx} y1={cy}
+          x2={px(i, 1).toFixed(2)} y2={py(i, 1).toFixed(2)}
+          stroke="#ddd4d9" strokeWidth="0.4"
+        />
       ))}
       {/* Data polygon */}
       <polygon
         points={polyPts}
-        fill="rgba(133,57,83,0.13)"
-        stroke="rgba(133,57,83,0.6)"
-        strokeWidth="1.2"
+        fill="rgba(133,57,83,0.16)"
+        stroke="rgba(133,57,83,0.75)"
+        strokeWidth={showLabels ? '1.5' : '1.2'}
         strokeLinejoin="round"
       />
-      {/* Highlighted top-3 dots */}
+      {/* Axis labels (query chart only) */}
+      {showLabels && Array.from({ length: RADAR_N }, (_, i) => {
+        const a = angle(i)
+        const lx = cx + labelR * Math.cos(a)
+        const ly = cy + labelR * Math.sin(a)
+        const anchor = Math.cos(a) > 0.3 ? 'start' : Math.cos(a) < -0.3 ? 'end' : 'middle'
+        const baseline = Math.sin(a) > 0.3 ? 'hanging' : Math.sin(a) < -0.3 ? 'auto' : 'middle'
+        const isTop = topIdxs.includes(i)
+        return (
+          <text key={i}
+            x={lx.toFixed(2)} y={ly.toFixed(2)}
+            textAnchor={anchor} dominantBaseline={baseline}
+            fontSize="7.2" fontFamily="IBM Plex Mono, monospace"
+            fill={isTop ? '#853953' : '#b0a0a8'}
+            fontWeight={isTop ? '700' : '400'}
+          >
+            {RADAR_SHORT_LABELS[i]}
+          </text>
+        )
+      })}
+      {/* Top-dim accent dots */}
       {topIdxs.map((idx, j) => (
-        <circle
-          key={idx}
-          cx={px(idx, values[idx]).toFixed(2)}
-          cy={py(idx, values[idx]).toFixed(2)}
-          r={j === 0 ? 3.2 : j === 1 ? 2.4 : 1.8}
-          fill="var(--color-accent)"
+        <circle key={idx}
+          cx={px(idx, vals[idx]).toFixed(2)}
+          cy={py(idx, vals[idx]).toFixed(2)}
+          r={j === 0 ? 3.5 : j === 1 ? 2.6 : 2}
+          fill="#853953"
           opacity={j === 0 ? 1 : 0.65}
         >
           <title>{RADAR_AXIS_LABELS[idx]}</title>
@@ -143,6 +176,7 @@ function App(): JSX.Element {
   const originalQueryRef = useRef<string>('')
   const rewriteCacheRef = useRef<{ original: string; rewritten: string; ts: number } | null>(null)
   const [activatedDimensions, setActivatedDimensions] = useState<string[]>([])
+  const [queryDimActivations, setQueryDimActivations] = useState<number[]>([])
   const [activeCategories, setActiveCategories] = useState<string[]>([])
   const [classification, setClassification] = useState<ClassificationInfo | null>(null)
   const [ragByResult, setRagByResult] = useState<Record<string, CaseRagState>>({})
@@ -166,6 +200,7 @@ function App(): JSX.Element {
       setDeepDiveByResult({})
       setActiveDeepDiveKey(null)
       setActivatedDimensions(data.activated_dimensions ?? [])
+      setQueryDimActivations(data.query_dim_activations ?? [])
       setClassification(data.classification ?? null)
 
       if (useLlm && q.trim() && data.results.length > 0) {
@@ -453,6 +488,7 @@ function App(): JSX.Element {
       setDeepDiveByResult({})
       setActiveDeepDiveKey(null)
       setActivatedDimensions(data.activated_dimensions ?? [])
+      setQueryDimActivations(data.query_dim_activations ?? [])
       setClassification(data.classification ?? null)
 
       if (useLlm && data.results.length > 0) {
@@ -585,7 +621,7 @@ function App(): JSX.Element {
                   )
                 })}
               </div>
-              <RadarChart dims={activatedDimensions} barWidthFn={(j) => 100 - j * 28} size={112} />
+              <RadarChart values={queryDimActivations} topIdxs={topIdxsFromLabels(activatedDimensions)} size={150} showLabels />
             </div>
           </div>
         )}
@@ -675,7 +711,7 @@ function App(): JSX.Element {
                           )
                         })}
                       </div>
-                      <RadarChart dims={c.why} barWidthFn={(k) => 100 - k * 25} size={84} />
+                      <RadarChart values={c.dim_activations ?? []} topIdxs={topIdxsFromLabels(c.why ?? [])} size={90} />
                     </div>
                   </div>
                 )}

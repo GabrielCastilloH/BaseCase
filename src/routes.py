@@ -185,6 +185,26 @@ def _wants_query_rewrite() -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _query_dim_activations(query_svd: np.ndarray) -> list:
+    """Normalized absolute activation for all labeled dims — powers the radar chart."""
+    vec = query_svd[0]
+    vals = [float(abs(vec[i])) if i < len(vec) else 0.0 for i in range(_n_label_dims)]
+    max_v = max(vals) if vals else 1.0
+    if max_v <= 0:
+        max_v = 1.0
+    return [round(v / max_v, 4) for v in vals]
+
+
+def _doc_dim_activations(doc_svd: np.ndarray) -> list:
+    """Normalized absolute activation for all labeled dims of a document — for per-result radar."""
+    vec = np.asarray(doc_svd).reshape(-1)
+    vals = [float(abs(vec[i])) if i < len(vec) else 0.0 for i in range(_n_label_dims)]
+    max_v = max(vals) if vals else 1.0
+    if max_v <= 0:
+        max_v = 1.0
+    return [round(v / max_v, 4) for v in vals]
+
+
 def _activated_dimension_labels(query_svd: np.ndarray, top_n: int = 3):
     """Top latent dimensions by |activation|, with +/- sign, for query-level explainability."""
     vec = query_svd[0]
@@ -466,6 +486,7 @@ def register_routes(app):
         query_svd = _query_svd_vector(effective_q)
         q_tfidf_snippet = VECTORIZER.transform([effective_q])
         activated_dimensions = _activated_dimension_labels(query_svd, top_n=3)
+        query_dim_activations = _query_dim_activations(query_svd)
 
         sub_matrix = SVD_MATRIX[indices]
         sims = cosine_similarity(query_svd, sub_matrix).flatten()
@@ -497,6 +518,7 @@ def register_routes(app):
                 "snippet_is_excerpt": is_excerpt,
                 "url": case.get("url", ""),
                 "why": why_hit,
+                "dim_activations": _doc_dim_activations(doc_svd),
             })
 
         return jsonify({
@@ -504,6 +526,7 @@ def register_routes(app):
             "detected_category": human_category,
             "confidence": round(float(confidence), 4) if confidence is not None else None,
             "activated_dimensions": activated_dimensions,
+            "query_dim_activations": query_dim_activations,
             "classification": classification,
             "query_used_for_retrieval": effective_q,
             "query_rewrite_applied": rewrite_applied,
