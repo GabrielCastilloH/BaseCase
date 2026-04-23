@@ -160,54 +160,28 @@ body {
   align-self: flex-start;
 }
 
-.enhance-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.68rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  min-width: 7.5rem;
-  padding: 0 0.85rem;
-  border: none;
-  border-left: 1px solid var(--color-border);
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  flex-shrink: 0;
-}
-
-.enhance-btn:hover:not(:disabled) {
-  background: var(--color-disclaimer-bg);
-  color: var(--color-accent);
-}
-
-.enhance-btn-active {
-  background: var(--color-header-bg);
-  color: var(--color-header-text);
-  border-left-color: var(--color-header-bg);
-}
-
-.enhance-btn-active:hover:not(:disabled) {
-  background: var(--color-accent-hover);
-  color: var(--color-header-text);
-}
-
-.enhance-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 .search-actions {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   margin-bottom: 1rem;
   flex-wrap: wrap;
+}
+
+.rewrite-search-btn {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  background: #fff;
+  padding: 0.28rem 0.6rem;
+  cursor: pointer;
+}
+
+.rewrite-search-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .rewrite-note {
@@ -1012,6 +986,18 @@ body {
 
 .synthesis-toggle:hover { opacity: 1; }
 
+.synthesis-loading-indicator {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.9rem;
+  line-height: 1;
+  letter-spacing: 0.25em;
+  color: var(--color-header-subtext);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
 .synthesis-body {
   padding: 0.75rem 0.9rem;
 }
@@ -1027,6 +1013,15 @@ body {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
+}
+
+.synthesis-footnote {
+  margin: 0.5rem 0 0;
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+  border-top: 1px dashed var(--color-border-light);
+  padding-top: 0.45rem;
+  font-style: italic;
 }
 
 .synthesis-error {

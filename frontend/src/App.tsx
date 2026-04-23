@@ -45,7 +45,7 @@ const EMPTY_SYNTHESIS_STATE: SearchSynthesisState = {
   loading: false,
   text: null,
   error: null,
-  expanded: true,
+  expanded: false,
 }
 
 function parseDimLine(line: string): { positive: boolean; label: string } {
@@ -193,8 +193,8 @@ function App(): JSX.Element {
   const [searchBusy, setSearchBusy] = useState<boolean>(false)
   const [searchSynthesis, setSearchSynthesis] = useState<SearchSynthesisState>(EMPTY_SYNTHESIS_STATE)
   const [rewriteActive, setRewriteActive] = useState<boolean>(false)
-  const originalQueryRef = useRef<string>('')
-  const rewriteCacheRef = useRef<{ original: string; rewritten: string; ts: number } | null>(null)
+  const [queryUsedForRetrieval, setQueryUsedForRetrieval] = useState<string | null>(null)
+  const synthesisTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [activatedDimensions, setActivatedDimensions] = useState<string[]>([])
   const [queryDimActivations, setQueryDimActivations] = useState<number[]>([])
   const [activeCategories, setActiveCategories] = useState<string[]>([])
@@ -206,12 +206,16 @@ function App(): JSX.Element {
   const deepDiveMessagesRef = useRef<HTMLDivElement>(null)
   const [activeDeepDiveKey, setActiveDeepDiveKey] = useState<string | null>(null)
 
-  const fetchResults = async (q: string, categories: string[]): Promise<void> => {
+  const fetchResults = async (
+    q: string,
+    categories: string[],
+    opts?: { rewrite?: boolean },
+  ): Promise<LegalCase[]> => {
     const params = new URLSearchParams()
     if (q.trim()) params.set('q', q)
+    if (opts?.rewrite && q.trim()) params.set('rewrite', '1')
     for (const c of categories) params.append('category', c)
     setSearchBusy(true)
-    setSearchSynthesis(EMPTY_SYNTHESIS_STATE)
     try {
       const response = await fetch(`/api/search?${params.toString()}`)
       const data: SearchResponse = await response.json()
@@ -222,39 +226,29 @@ function App(): JSX.Element {
       setActivatedDimensions(data.activated_dimensions ?? [])
       setQueryDimActivations(data.query_dim_activations ?? [])
       setClassification(data.classification ?? null)
-
-      if (useLlm && q.trim() && data.results.length > 0) {
-        setSearchSynthesis({ loading: true, text: null, error: null, expanded: true })
-        const casesPayload = data.results.slice(0, 5).map((r) => ({
-          name: r.case_name,
-          snippet: r.snippet,
-        }))
-        fetch('/api/search-rag', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_query: q, cases: casesPayload }),
-        })
-          .then((r) => r.json())
-          .then((d: SearchRagResponse) => {
-            setSearchSynthesis({
-              loading: false,
-              text: d.synthesis ?? null,
-              error: d.error ?? null,
-              expanded: true,
-            })
-          })
-          .catch(() => {
-            setSearchSynthesis({
-              loading: false,
-              text: null,
-              error: 'Failed to generate AI summary.',
-              expanded: true,
-            })
-          })
-      }
+      setQueryUsedForRetrieval(data.query_used_for_retrieval ?? null)
+      setRewriteActive(Boolean(data.query_rewrite_applied))
+      return data.results
     } finally {
       setSearchBusy(false)
     }
+  }
+
+  const triggerSynthesis = (q: string, cases: Array<{ name: string; snippet: string }>): void => {
+    if (!useLlm || !q.trim() || cases.length === 0) return
+    setSearchSynthesis({ loading: true, text: null, error: null, expanded: false })
+    fetch('/api/search-rag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_query: q, cases }),
+    })
+      .then((r) => r.json())
+      .then((d: SearchRagResponse) => {
+        setSearchSynthesis({ loading: false, text: d.synthesis ?? null, error: d.error ?? null, expanded: false })
+      })
+      .catch(() => {
+        setSearchSynthesis({ loading: false, text: null, error: 'Failed to generate AI summary.', expanded: false })
+      })
   }
 
   const handleRunRag = async (c: LegalCase, idx: number): Promise<void> => {
@@ -487,74 +481,35 @@ function App(): JSX.Element {
   }, [searchTerm])
 
   const handleSearch = (value: string): void => {
-    if (rewriteActive) {
-      setRewriteActive(false)
-    }
+    setRewriteActive(false)
+    setQueryUsedForRetrieval(null)
     setSearchTerm(value)
-    fetchResults(value, activeCategories)
-    if (!value.trim()) setActivatedDimensions([])
+    if (!value.trim()) {
+      setActivatedDimensions([])
+      setSearchSynthesis(EMPTY_SYNTHESIS_STATE)
+      if (synthesisTimerRef.current) clearTimeout(synthesisTimerRef.current)
+      fetchResults(value, activeCategories)
+      return
+    }
+    fetchResults(value, activeCategories).then((fetchedResults) => {
+      if (synthesisTimerRef.current) clearTimeout(synthesisTimerRef.current)
+      if (fetchedResults.length === 0) return
+      synthesisTimerRef.current = setTimeout(() => {
+        triggerSynthesis(value, fetchedResults.slice(0, 5).map((r) => ({ name: r.case_name, snippet: r.snippet })))
+      }, 5000)
+    })
   }
 
-  const handleEnhanceToggle = async (): Promise<void> => {
-    if (rewriteActive) {
-      const orig = originalQueryRef.current
-      setSearchTerm(orig)
-      setRewriteActive(false)
-      fetchResults(orig, activeCategories)
-      return
-    }
-
+  const runAiRewriteSearch = (): void => {
     const q = searchTerm.trim()
     if (!q || searchBusy) return
-
-    const cache = rewriteCacheRef.current
-    if (cache && cache.original === q && Date.now() - cache.ts < 60_000) {
-      originalQueryRef.current = q
-      setSearchTerm(cache.rewritten)
-      setRewriteActive(true)
-      fetchResults(cache.rewritten, activeCategories)
-      return
-    }
-
-    originalQueryRef.current = q
-    setSearchBusy(true)
-    setSearchSynthesis(EMPTY_SYNTHESIS_STATE)
-    try {
-      const params = new URLSearchParams({ q, rewrite: '1' })
-      for (const c of activeCategories) params.append('category', c)
-      const response = await fetch(`/api/search?${params}`)
-      const data: SearchResponse = await response.json()
-      const rewritten = data.query_used_for_retrieval ?? q
-      rewriteCacheRef.current = { original: q, rewritten, ts: Date.now() }
-      setSearchTerm(rewritten)
-      setRewriteActive(true)
-      setResults(data.results)
-      setRagByResult({})
-      setDeepDiveByResult({})
-      setActiveDeepDiveKey(null)
-      setActivatedDimensions(data.activated_dimensions ?? [])
-      setQueryDimActivations(data.query_dim_activations ?? [])
-      setClassification(data.classification ?? null)
-
-      if (useLlm && data.results.length > 0) {
-        setSearchSynthesis({ loading: true, text: null, error: null, expanded: true })
-        const casesPayload = data.results.slice(0, 5).map((r) => ({ name: r.case_name, snippet: r.snippet }))
-        fetch('/api/search-rag', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_query: q, cases: casesPayload }),
-        })
-          .then((r) => r.json())
-          .then((d: SearchRagResponse) => {
-            setSearchSynthesis({ loading: false, text: d.synthesis ?? null, error: d.error ?? null, expanded: true })
-          })
-          .catch(() => {
-            setSearchSynthesis({ loading: false, text: null, error: 'Failed to generate AI summary.', expanded: true })
-          })
-      }
-    } finally {
-      setSearchBusy(false)
-    }
+    fetchResults(searchTerm, activeCategories, { rewrite: !rewriteActive }).then((fetchedResults) => {
+      if (synthesisTimerRef.current) clearTimeout(synthesisTimerRef.current)
+      if (fetchedResults.length === 0) return
+      synthesisTimerRef.current = setTimeout(() => {
+        triggerSynthesis(q, fetchedResults.slice(0, 5).map((r) => ({ name: r.case_name, snippet: r.snippet })))
+      }, 5000)
+    })
   }
 
   const handlePillClick = (key: string): void => {
@@ -562,7 +517,13 @@ function App(): JSX.Element {
       ? activeCategories.filter((k) => k !== key)
       : [...activeCategories, key]
     setActiveCategories(next)
-    fetchResults(searchTerm, next)
+    fetchResults(searchTerm, next, { rewrite: rewriteActive && Boolean(searchTerm.trim()) }).then((fetchedResults) => {
+      if (synthesisTimerRef.current) clearTimeout(synthesisTimerRef.current)
+      if (!searchTerm.trim() || fetchedResults.length === 0) return
+      synthesisTimerRef.current = setTimeout(() => {
+        triggerSynthesis(searchTerm, fetchedResults.slice(0, 5).map((r) => ({ name: r.case_name, snippet: r.snippet })))
+      }, 5000)
+    })
   }
 
   return (
@@ -619,22 +580,29 @@ function App(): JSX.Element {
             spellCheck
             aria-label="Describe your legal situation"
           />
-          {useLlm && (
+        </div>
+        {useLlm && (
+          <div className="search-actions">
             <button
               type="button"
-              className={`enhance-btn${rewriteActive ? ' enhance-btn-active' : ''}`}
-              onClick={handleEnhanceToggle}
+              className="rewrite-search-btn"
+              onClick={runAiRewriteSearch}
               disabled={!searchTerm.trim() || searchBusy}
-              title={rewriteActive ? 'Switch back to original query' : 'Rewrite query with AI for better results'}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-              </svg>
-              {rewriteActive ? 'AI Enhanced' : 'AI Enhance'}
+              {searchBusy
+                ? 'Searching...'
+                : rewriteActive
+                  ? 'Use Original Query'
+                  : 'AI Rewrite Search'}
             </button>
-          )}
-        </div>
-
+            {searchTerm.trim() && (
+              <p className="rewrite-note">
+                Searching with {rewriteActive ? 'AI rewritten query' : 'original query'}:{' '}
+                {queryUsedForRetrieval ?? searchTerm.trim()}
+              </p>
+            )}
+          </div>
+        )}
 
         {classification?.needs_user_category && searchTerm.trim() && (
           <div
@@ -671,7 +639,7 @@ function App(): JSX.Element {
           </div>
         )}
 
-        {useLlm && searchTerm.trim() && (results.length > 0 || searchSynthesis.loading) && (
+        {useLlm && searchTerm.trim() && results.length > 0 && (
           <div className="synthesis-banner">
             <div className="synthesis-header">
               <span className="synthesis-title">
@@ -680,25 +648,27 @@ function App(): JSX.Element {
                 </svg>
                 AI Legal Summary
               </span>
-              <button
-                type="button"
-                className="synthesis-toggle"
-                onClick={() => setSearchSynthesis((prev) => ({ ...prev, expanded: !prev.expanded }))}
-              >
-                {searchSynthesis.expanded ? '▲ collapse' : '▼ expand'}
-              </button>
+              {(searchSynthesis.text !== null || searchSynthesis.error !== null) ? (
+                <button
+                  type="button"
+                  className="synthesis-toggle"
+                  onClick={() => setSearchSynthesis((prev) => ({ ...prev, expanded: !prev.expanded }))}
+                >
+                  {searchSynthesis.expanded ? '▲ collapse' : '▼ expand'}
+                </button>
+              ) : (
+                <span className="synthesis-loading-indicator">•••</span>
+              )}
             </div>
-            {searchSynthesis.expanded && (
+            {!searchSynthesis.loading && searchSynthesis.expanded && (
               <div className="synthesis-body">
-                {searchSynthesis.loading && (
-                  <p className="synthesis-loading">Synthesizing from retrieved cases…</p>
-                )}
-                {!searchSynthesis.loading && searchSynthesis.error && (
+                {searchSynthesis.error && (
                   <p className="synthesis-error">{searchSynthesis.error}</p>
                 )}
-                {!searchSynthesis.loading && searchSynthesis.text && (
+                {searchSynthesis.text && (
                   <p className="synthesis-text">{searchSynthesis.text}</p>
                 )}
+                <p className="synthesis-footnote">[n] refers to the nth result shown below</p>
               </div>
             )}
           </div>
@@ -765,7 +735,7 @@ function App(): JSX.Element {
                     <div className="case-analysis-header" onClick={() => toggleRagPanel(c, i)}>
                       <span className="case-analysis-title">
                         <span className="case-analysis-chevron">{ragState.expanded ? '▼' : '▶'}</span>
-                        Case Analysis
+                        AI Case Analysis
                       </span>
                       {ragState.answer && (
                         <button
