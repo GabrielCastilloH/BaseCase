@@ -812,11 +812,8 @@ function App(): JSX.Element {
                   {/* Case Header */}
                   <div className="dd-case-header">
                     <div className="dd-case-header-top">
-                      <span className={`category-badge badge-${cat} dd-category-badge`}>
+                      <span className={`category-badge badge-${cat}`}>
                         {c.category.replace(/_/g, ' ')}
-                      </span>
-                      <span className="dd-similarity-badge">
-                        {(c.similarity * 100).toFixed(0)}% match
                       </span>
                       {c.url && (
                         <a
@@ -829,7 +826,12 @@ function App(): JSX.Element {
                         </a>
                       )}
                     </div>
-                    <h2 className="dd-case-title">{c.case_name}</h2>
+                    <div className="dd-case-title-row">
+                      <h2 className="dd-case-title">{c.case_name}</h2>
+                      <span className="dd-similarity-badge">
+                        {(c.similarity * 100).toFixed(0)}% match
+                      </span>
+                    </div>
                   </div>
 
                   {/* Dual-Polygon Radar */}
