@@ -32,6 +32,8 @@ export interface SearchResponse {
   /** Top latent semantic dimensions for the query (SVD explainability) */
   activated_dimensions?: string[]
   classification?: ClassificationInfo
+  query_used_for_retrieval?: string
+  query_rewrite_applied?: boolean
 }
 
 export interface CaseRagRequest {
