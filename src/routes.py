@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'query-classifi
 from classifier import RuleBasedLegalClassifier
 from keywords import category_keywords
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'llmRAG'))
-from rag import run_case_rag, run_case_rag_chat, rewrite_query_for_retrieval
+from rag import run_case_rag, run_case_rag_chat, rewrite_query_for_retrieval, run_search_rag
 
 cases_path = os.path.join(os.path.dirname(__file__), 'cases.json')
 with open(cases_path) as f:
@@ -561,6 +561,21 @@ def register_routes(app):
             "case_name": case.get("case_name") or case_name,
         })
 
+    @app.route("/api/search-rag", methods=["POST"])
+    def search_rag():
+        payload = request.get_json(silent=True) or {}
+        user_query = (payload.get("user_query") or "").strip()
+        cases = payload.get("cases") or []
+
+        if not user_query:
+            return jsonify({"error": "Missing required field: user_query"}), 400
+        if not cases:
+            return jsonify({"error": "Missing required field: cases"}), 400
+
+        synthesis = run_search_rag(user_query, cases)
+        return jsonify({"synthesis": synthesis})
+
     @app.route("/api/config")
     def config():
-        return jsonify({"use_llm": False})
+        use_llm = os.getenv("SPARK_API_KEY") is not None
+        return jsonify({"use_llm": use_llm})

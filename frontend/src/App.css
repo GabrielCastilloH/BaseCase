@@ -540,6 +540,133 @@ body {
   cursor: not-allowed;
 }
 
+/* ── AI Synthesis Banner ─────────────────────────────────────────── */
+.synthesis-banner {
+  margin-bottom: 1.25rem;
+  border: 1px solid var(--color-accent);
+  background: #fdf8fb;
+}
+
+.synthesis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.85rem;
+  background: var(--color-header-bg);
+  color: var(--color-header-text);
+}
+
+.synthesis-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-header-text);
+}
+
+.synthesis-toggle {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.3);
+  color: var(--color-header-text);
+  padding: 0.15rem 0.4rem;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.synthesis-toggle:hover { opacity: 1; }
+
+.synthesis-body {
+  padding: 0.75rem 0.9rem;
+}
+
+.synthesis-loading {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin: 0;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.synthesis-error {
+  font-size: 0.72rem;
+  color: #9b2d2d;
+  margin: 0;
+}
+
+.synthesis-text {
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: var(--color-text-secondary);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* ── SVD Dimension Bars ──────────────────────────────────────────── */
+.dim-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.dim-bars-sm {
+  gap: 0.28rem;
+}
+
+.dim-bar-row {
+  display: grid;
+  grid-template-columns: 1rem 80px 1fr;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+}
+
+.dim-bars-sm .dim-bar-row {
+  font-size: 0.63rem;
+  grid-template-columns: 1rem 60px 1fr;
+}
+
+.dim-sign {
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.dim-pos .dim-sign { color: #3a7d44; }
+.dim-neg .dim-sign { color: #9b2d2d; }
+
+.dim-track {
+  height: 5px;
+  background: var(--color-border-light);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.dim-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.dim-pos .dim-fill { background: #3a7d44; }
+.dim-neg .dim-fill { background: #9b2d2d; }
+
+.dim-text {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-style: italic;
+}
+
 @media (max-width: 600px) {
   .site-header { padding: 1rem; }
   .main-content { padding: 1.5rem 1rem 3rem; }

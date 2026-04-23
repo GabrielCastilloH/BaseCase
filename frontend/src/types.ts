@@ -75,3 +75,20 @@ export interface DeepDiveState {
   messages: DeepDiveMessage[]
   draft: string
 }
+
+export interface SearchRagRequest {
+  user_query: string
+  cases: Array<{ name: string; snippet: string }>
+}
+
+export interface SearchRagResponse {
+  synthesis?: string
+  error?: string
+}
+
+export interface SearchSynthesisState {
+  loading: boolean
+  text: string | null
+  error: string | null
+  expanded: boolean
+}

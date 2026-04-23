@@ -10,7 +10,9 @@ import {
   DeepDiveMessage,
   DeepDiveState,
   LegalCase,
+  SearchRagResponse,
   SearchResponse,
+  SearchSynthesisState,
 } from './types'
 
 function categoryClass(cat: string): string {
@@ -35,6 +37,19 @@ const EMPTY_RAG_STATE: CaseRagState = {
   error: null,
   expanded: false,
 }
+
+const EMPTY_SYNTHESIS_STATE: SearchSynthesisState = {
+  loading: false,
+  text: null,
+  error: null,
+  expanded: true,
+}
+
+function parseDimLine(line: string): { positive: boolean; label: string } {
+  const positive = line.startsWith('(+)')
+  const label = line.replace(/^\([+-]\)\s*/, '')
+  return { positive, label }
+}
 const EMPTY_DEEP_DIVE_STATE: DeepDiveState = {
   open: false,
   loading: false,
@@ -48,9 +63,11 @@ function resultKey(c: LegalCase, idx: number): string {
 }
 
 function App(): JSX.Element {
+  const [useLlm, setUseLlm] = useState<boolean>(false)
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [results, setResults] = useState<LegalCase[]>([])
   const [searchBusy, setSearchBusy] = useState<boolean>(false)
+  const [searchSynthesis, setSearchSynthesis] = useState<SearchSynthesisState>(EMPTY_SYNTHESIS_STATE)
   const [rewriteActive, setRewriteActive] = useState<boolean>(false)
   const [queryUsedForRetrieval, setQueryUsedForRetrieval] = useState<string | null>(null)
   const [detectedCategory, setDetectedCategory] = useState<string | null>(null)
@@ -77,6 +94,7 @@ function App(): JSX.Element {
       params.append('category', c)
     }
     setSearchBusy(true)
+    setSearchSynthesis(EMPTY_SYNTHESIS_STATE)
     try {
       const response = await fetch(`/api/search?${params.toString()}`)
       const data: SearchResponse = await response.json()
@@ -90,6 +108,36 @@ function App(): JSX.Element {
       setClassification(data.classification ?? null)
       setQueryUsedForRetrieval(data.query_used_for_retrieval ?? null)
       setRewriteActive(Boolean(data.query_rewrite_applied))
+
+      if (useLlm && q.trim() && data.results.length > 0) {
+        setSearchSynthesis({ loading: true, text: null, error: null, expanded: true })
+        const casesPayload = data.results.slice(0, 5).map((r) => ({
+          name: r.case_name,
+          snippet: r.snippet,
+        }))
+        fetch('/api/search-rag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_query: q, cases: casesPayload }),
+        })
+          .then((r) => r.json())
+          .then((d: SearchRagResponse) => {
+            setSearchSynthesis({
+              loading: false,
+              text: d.synthesis ?? null,
+              error: d.error ?? null,
+              expanded: true,
+            })
+          })
+          .catch(() => {
+            setSearchSynthesis({
+              loading: false,
+              text: null,
+              error: 'Failed to generate AI summary.',
+              expanded: true,
+            })
+          })
+      }
     } finally {
       setSearchBusy(false)
     }
@@ -284,7 +332,13 @@ function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [activeDeepDiveKey, deepDiveByResult])
 
-  useEffect(() => { fetchResults('', []) }, [])
+  useEffect(() => {
+    fetch('/api/config')
+      .then((r) => r.json())
+      .then((d) => setUseLlm(Boolean(d.use_llm)))
+      .catch(() => {})
+    fetchResults('', [])
+  }, [])
 
   useEffect(() => {
     const el = searchInputRef.current
@@ -426,12 +480,54 @@ function App(): JSX.Element {
 
         {activatedDimensions.length > 0 && (
           <div className="query-explainability" aria-label="Query latent dimensions">
-            <span className="query-explainability-label">Strongest query themes (SVD, query only):</span>
-            <ul className="query-explainability-list">
-              {activatedDimensions.map((dim, j) => (
-                <li key={j}>{dim}</li>
-              ))}
-            </ul>
+            <span className="query-explainability-label">Strongest query themes (SVD):</span>
+            <div className="dim-bars">
+              {activatedDimensions.map((dim, j) => {
+                const { positive, label } = parseDimLine(dim)
+                return (
+                  <div key={j} className={`dim-bar-row ${positive ? 'dim-pos' : 'dim-neg'}`}>
+                    <span className="dim-sign">{positive ? '+' : '−'}</span>
+                    <div className="dim-track">
+                      <div className="dim-fill" style={{ width: `${100 - j * 28}%` }} />
+                    </div>
+                    <span className="dim-text">{label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {useLlm && searchTerm.trim() && (results.length > 0 || searchSynthesis.loading) && (
+          <div className="synthesis-banner">
+            <div className="synthesis-header">
+              <span className="synthesis-title">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ verticalAlign: 'middle', marginRight: '0.4rem' }}>
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                AI Legal Summary
+              </span>
+              <button
+                type="button"
+                className="synthesis-toggle"
+                onClick={() => setSearchSynthesis((prev) => ({ ...prev, expanded: !prev.expanded }))}
+              >
+                {searchSynthesis.expanded ? '▲ collapse' : '▼ expand'}
+              </button>
+            </div>
+            {searchSynthesis.expanded && (
+              <div className="synthesis-body">
+                {searchSynthesis.loading && (
+                  <p className="synthesis-loading">Synthesizing from retrieved cases…</p>
+                )}
+                {!searchSynthesis.loading && searchSynthesis.error && (
+                  <p className="synthesis-error">{searchSynthesis.error}</p>
+                )}
+                {!searchSynthesis.loading && searchSynthesis.text && (
+                  <p className="synthesis-text">{searchSynthesis.text}</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -458,12 +554,21 @@ function App(): JSX.Element {
                 <p className="result-snippet">{c.snippet}</p>
                 {c.why && c.why.length > 0 && (
                   <div className="why-this-result">
-                    <span className="why-label">Why this match? (shared latent themes)</span>
-                    <ul className="why-list">
-                      {c.why.map((line, k) => (
-                        <li key={k}>{line}</li>
-                      ))}
-                    </ul>
+                    <span className="why-label">Why this match? (SVD latent themes)</span>
+                    <div className="dim-bars dim-bars-sm">
+                      {c.why.map((line, k) => {
+                        const { positive, label } = parseDimLine(line)
+                        return (
+                          <div key={k} className={`dim-bar-row ${positive ? 'dim-pos' : 'dim-neg'}`}>
+                            <span className="dim-sign">{positive ? '+' : '−'}</span>
+                            <div className="dim-track">
+                              <div className="dim-fill" style={{ width: `${100 - k * 25}%` }} />
+                            </div>
+                            <span className="dim-text">{label}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
                 {c.url && (
@@ -471,36 +576,35 @@ function App(): JSX.Element {
                     view on CourtListener →
                   </a>
                 )}
-                <div className="rag-actions">
-                  <button
-                    type="button"
-                    className="rag-btn"
-                    disabled={ragState.loading || !searchTerm.trim()}
-                    onClick={() => handleRunRag(c, i)}
-                  >
-                    {ragState.loading ? 'Generating...' : hasGenerated ? 'Regenerate' : 'Run RAG'}
-                  </button>
-                  {hasGenerated && (
+                {useLlm && (
+                  <div className="rag-actions">
                     <button
                       type="button"
-                      className="rag-toggle-btn"
-                      onClick={() => toggleRagPanel(c, i)}
+                      className="rag-btn"
+                      disabled={ragState.loading || !searchTerm.trim()}
+                      onClick={() => handleRunRag(c, i)}
                     >
-                      {ragState.expanded ? 'Hide' : 'Show'}
+                      {ragState.loading ? 'Generating...' : hasGenerated ? 'Regenerate' : 'Analyze Case'}
                     </button>
-                  )}
-                  {ragState.answer && (
-                    <button
-                      type="button"
-                      className="rag-toggle-btn"
-                      onClick={() => (diveState.open ? closeDeepDive(c, i) : openDeepDive(c, i))}
-                    >
-                      {diveState.open ? 'Close Deep Dive' : 'Deep Dive'}
-                    </button>
-                  )}
-                </div>
-                {!searchTerm.trim() && (
-                  <p className="rag-hint">Enter a query to run case-level RAG.</p>
+                    {hasGenerated && (
+                      <button
+                        type="button"
+                        className="rag-toggle-btn"
+                        onClick={() => toggleRagPanel(c, i)}
+                      >
+                        {ragState.expanded ? 'Hide' : 'Show'}
+                      </button>
+                    )}
+                    {ragState.answer && (
+                      <button
+                        type="button"
+                        className="rag-toggle-btn"
+                        onClick={() => (diveState.open ? closeDeepDive(c, i) : openDeepDive(c, i))}
+                      >
+                        {diveState.open ? 'Close Deep Dive' : 'Deep Dive'}
+                      </button>
+                    )}
+                  </div>
                 )}
                 {ragState.expanded && (ragState.answer || ragState.error) && (
                   <div className="rag-panel" role="status" aria-live="polite">

@@ -3,12 +3,6 @@ import getpass
 from infosci_spark_client import LLMClient
 from dotenv import load_dotenv
 
-import json
-
-# Local testing — remove when you need.
-with open("/home/daming108/BaseCase/src/cases.json", "r", encoding="utf-8") as f:
-    cases = json.load(f)
-
 load_dotenv()
 
 key = os.environ.get("SPARK_API_KEY")
@@ -68,6 +62,45 @@ Rules:
     if not rewritten:
         return q
     return " ".join(rewritten.split())[:280] or q
+
+
+def run_search_rag(user_query: str, cases: list) -> str:
+    """Synthesize a top-level answer from the top retrieved cases (global RAG panel)."""
+    q = (user_query or "").strip()
+    if not q:
+        return "No question was provided."
+    if not cases:
+        return "No cases were provided."
+
+    context_parts = []
+    for i, c in enumerate(cases, 1):
+        name = (c.get("name") or "").strip() or "Unknown case"
+        snippet = (c.get("snippet") or "").strip()
+        entry = f"[{i}] {name}"
+        if snippet:
+            entry += f"\n{snippet}"
+        context_parts.append(entry)
+    context = "\n\n".join(context_parts)
+
+    system = """
+You are a legal search assistant. Given a user's legal question and a set of relevant court cases retrieved by a search engine, synthesize a concise answer.
+
+Rules:
+- Base your answer only on the provided case summaries.
+- Cite cases by their bracketed number [1], [2], etc. when referencing them.
+- Keep the answer to 3-5 sentences total.
+- Do not invent facts, holdings, or legal outcomes not present in the summaries.
+- End with exactly this sentence: "Note: This is general legal information, not legal advice."
+""".strip()
+
+    prompt = [
+        {"role": "system", "content": system},
+        {
+            "role": "user",
+            "content": f"User question: {q}\n\nRetrieved cases:\n{context}\n\nSynthesize a brief answer:",
+        },
+    ]
+    return _safe_chat(prompt)
 
 
 def run_case_rag(user_query: str, case_context: str, case_name: str) -> str:
@@ -173,8 +206,3 @@ Rules:
     return _safe_chat(prompt)
 
 
-if __name__ == "__main__":
-    user_query = "I copy other people's code and use it in my own project. Is that legal?"
-    case_context = cases[2]["text"]
-    case_name = cases[2]["case_name"]
-    print(run_case_rag(user_query, case_context, case_name))
