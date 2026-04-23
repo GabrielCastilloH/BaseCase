@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import ReactMarkdown from 'react-markdown'
 import './App.css'
 import SearchIcon from './assets/mag.png'
 import {
@@ -417,24 +418,27 @@ function App(): JSX.Element {
             spellCheck
             aria-label="Describe your legal situation"
           />
+          {useLlm && (
+            <button
+              type="button"
+              className={`enhance-btn${rewriteActive ? ' enhance-btn-active' : ''}`}
+              onClick={runAiRewriteSearch}
+              disabled={!searchTerm.trim() || searchBusy}
+              title={rewriteActive ? 'Switch back to original query' : 'Rewrite query with AI for better results'}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              {rewriteActive ? 'Enhanced' : 'Enhance'}
+            </button>
+          )}
         </div>
         <div className="search-actions">
-          <button
-            type="button"
-            className="rewrite-search-btn"
-            onClick={runAiRewriteSearch}
-            disabled={!searchTerm.trim() || searchBusy}
-          >
-            {searchBusy
-              ? 'Searching...'
-              : rewriteActive
-                ? 'Use Original Query'
-                : 'AI Rewrite Search'}
-          </button>
           {searchTerm.trim() && (
             <p className="rewrite-note">
-              Searching with {rewriteActive ? 'AI rewritten query' : 'original query'}:{' '}
-              {queryUsedForRetrieval ?? searchTerm.trim()}
+              {rewriteActive
+                ? <>AI rewritten: <em>{queryUsedForRetrieval ?? searchTerm.trim()}</em></>
+                : <>Original query</>}
             </p>
           )}
         </div>
@@ -611,7 +615,9 @@ function App(): JSX.Element {
                     {ragState.error ? (
                       <p className="rag-error">{ragState.error}</p>
                     ) : (
-                      <pre className="rag-answer">{ragState.answer}</pre>
+                      <div className="rag-answer">
+                        <ReactMarkdown>{ragState.answer ?? ''}</ReactMarkdown>
+                      </div>
                     )}
                   </div>
                 )}
