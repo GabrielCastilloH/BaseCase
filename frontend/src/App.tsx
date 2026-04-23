@@ -642,39 +642,42 @@ function App(): JSX.Element {
         </div>
         {activeDeepDiveContext && activeDeepDiveKey && (deepDiveByResult[activeDeepDiveKey]?.open ?? false) && (
           <div className="deep-dive-overlay" onClick={closeActiveDeepDive}>
-            <div className="deep-dive-panel deep-dive-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="deep-dive-modal" onClick={(e) => e.stopPropagation()}>
               <div className="deep-dive-header">
-                <span>Deep Dive: {activeDeepDiveContext.caseItem.case_name}</span>
-                <button
-                  type="button"
-                  className="deep-dive-close"
-                  onClick={closeActiveDeepDive}
-                >
-                  close
-                </button>
+                <div className="deep-dive-header-info">
+                  <span className="deep-dive-label">Deep Dive</span>
+                  <span className="deep-dive-case-name">{activeDeepDiveContext.caseItem.case_name}</span>
+                </div>
+                <button type="button" className="deep-dive-close" onClick={closeActiveDeepDive}>✕</button>
               </div>
+
               <div className="deep-dive-messages" ref={deepDiveMessagesRef}>
                 {(deepDiveByResult[activeDeepDiveKey]?.messages ?? []).map((m, mIdx) => (
                   <div
                     key={`${m.role}-${mIdx}`}
                     className={`deep-dive-bubble ${m.role === 'user' ? 'deep-dive-user' : 'deep-dive-assistant'}`}
                   >
-                    {m.content}
+                    {m.role === 'assistant'
+                      ? <div className="deep-dive-md"><ReactMarkdown>{m.content}</ReactMarkdown></div>
+                      : m.content
+                    }
                   </div>
                 ))}
                 {deepDiveByResult[activeDeepDiveKey]?.loading && (
-                  <div className="deep-dive-bubble deep-dive-assistant">Thinking...</div>
+                  <div className="deep-dive-bubble deep-dive-assistant deep-dive-thinking">Thinking…</div>
                 )}
               </div>
+
               {deepDiveByResult[activeDeepDiveKey]?.error && (
                 <p className="deep-dive-error">{deepDiveByResult[activeDeepDiveKey]?.error}</p>
               )}
+
               <div className="deep-dive-input-row">
                 <textarea
                   ref={deepDiveInputRef}
                   className="deep-dive-input"
                   value={deepDiveByResult[activeDeepDiveKey]?.draft ?? ''}
-                  placeholder="Ask a follow-up about this case..."
+                  placeholder="Ask a follow-up about this case… (Enter to send)"
                   onChange={(e) => updateDeepDiveDraft(activeDeepDiveContext.caseItem, activeDeepDiveContext.idx, e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
