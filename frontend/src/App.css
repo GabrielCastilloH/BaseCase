@@ -107,6 +107,14 @@ body {
 .pill-employment:hover, .pill-employment.pill-active { background-color: var(--color-employment); color: var(--color-page-bg); }
 .pill-copyright:hover,  .pill-copyright.pill-active  { background-color: var(--color-copyright);  color: var(--color-page-bg); }
 
+.pill-detected { border-width: 2px; font-weight: 700; }
+
+.pill-pct {
+  font-size: 0.62rem;
+  opacity: 0.75;
+  font-weight: 400;
+}
+
 .search-row {
   display: flex;
   align-items: stretch;

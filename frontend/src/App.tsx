@@ -71,8 +71,6 @@ function App(): JSX.Element {
   const [searchSynthesis, setSearchSynthesis] = useState<SearchSynthesisState>(EMPTY_SYNTHESIS_STATE)
   const [rewriteActive, setRewriteActive] = useState<boolean>(false)
   const [queryUsedForRetrieval, setQueryUsedForRetrieval] = useState<string | null>(null)
-  const [detectedCategory, setDetectedCategory] = useState<string | null>(null)
-  const [confidence, setConfidence] = useState<number | null>(null)
   const [activatedDimensions, setActivatedDimensions] = useState<string[]>([])
   const [activeCategories, setActiveCategories] = useState<string[]>([])
   const [classification, setClassification] = useState<ClassificationInfo | null>(null)
@@ -103,8 +101,6 @@ function App(): JSX.Element {
       setRagByResult({})
       setDeepDiveByResult({})
       setActiveDeepDiveKey(null)
-      setDetectedCategory(data.detected_category)
-      setConfidence(data.confidence)
       setActivatedDimensions(data.activated_dimensions ?? [])
       setClassification(data.classification ?? null)
       setQueryUsedForRetrieval(data.query_used_for_retrieval ?? null)
@@ -354,7 +350,6 @@ function App(): JSX.Element {
     setQueryUsedForRetrieval(null)
     fetchResults(value, activeCategories, { rewrite: false })
     if (!value.trim()) {
-      setDetectedCategory(null)
       setActivatedDimensions([])
     }
   }
@@ -390,17 +385,27 @@ function App(): JSX.Element {
         </div>
 
         <div className="category-pills">
-          {PILL_CATEGORIES.map(({ label, key, cls }) => (
-            <span
-              key={key}
-              className={`pill pill-${cls}${activeCategories.includes(key) ? ' pill-active' : ''}`}
-              onClick={() => handlePillClick(key)}
-            >
-              {label}
-            </span>
-          ))}
+          {PILL_CATEGORIES.map(({ label, key, cls }) => {
+            const candidate = classification?.candidates?.find((c) => c.key === key)
+            const pct = candidate ? Math.round(candidate.score * 100) : null
+            const isDetected = classification?.status === 'ok' && candidate != null &&
+              classification.candidates[0]?.key === key
+            return (
+              <span
+                key={key}
+                className={[
+                  'pill',
+                  `pill-${cls}`,
+                  activeCategories.includes(key) ? 'pill-active' : '',
+                  isDetected && !activeCategories.includes(key) ? 'pill-detected' : '',
+                ].filter(Boolean).join(' ')}
+                onClick={() => handlePillClick(key)}
+              >
+                {label}{pct !== null ? <span className="pill-pct"> ({pct}%)</span> : null}
+              </span>
+            )
+          })}
         </div>
-        <p className="category-pills-hint">You can select multiple categories to mix results.</p>
 
         <div className="search-row">
           <img src={SearchIcon} alt="" className="search-icon" />
@@ -443,32 +448,6 @@ function App(): JSX.Element {
           )}
         </div>
 
-        {detectedCategory && (
-          <div className="detected-category-block">
-            <p className="detected-category">
-              {classification?.status === 'ambiguous' ? (
-                <>Matched areas: <strong>{detectedCategory}</strong></>
-              ) : classification?.status === 'user_selected' ? (
-                <>Filtering by: <strong>{detectedCategory}</strong></>
-              ) : classification?.status === 'browse' ? (
-                <>Showing: <strong>{detectedCategory}</strong></>
-              ) : (
-                <>
-                  Detected area: <strong>{detectedCategory}</strong>
-                  {classification?.status === 'ok' && confidence !== null && (
-                    <span className="confidence">
-                      {' '}
-                      — {(confidence * 100).toFixed(0)}% confidence
-                    </span>
-                  )}
-                </>
-              )}
-            </p>
-            {classification?.status === 'ambiguous' && classification.reason && (
-              <p className="ambiguous-note">{classification.reason}</p>
-            )}
-          </div>
-        )}
 
         {classification?.needs_user_category && searchTerm.trim() && (
           <div
