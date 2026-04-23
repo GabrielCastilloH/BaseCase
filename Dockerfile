@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir -r $CONTAINER_HOME/requirements.txt
 
 COPY src/ $CONTAINER_HOME/src/
 COPY query-classifier/ $CONTAINER_HOME/query-classifier/
+COPY llmRAG/ $CONTAINER_HOME/llmRAG/
 
 COPY --from=frontend-build /app/frontend/dist $CONTAINER_HOME/frontend/dist
 
