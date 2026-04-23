@@ -499,7 +499,7 @@ function App(): JSX.Element {
 
         {activatedDimensions.length > 0 && (
           <div className="query-explainability" aria-label="Query latent dimensions">
-            <span className="query-explainability-label">Strongest query themes (SVD):</span>
+            <span className="query-explainability-label">Strongest query themes:</span>
             <div className="dim-bars">
               {activatedDimensions.map((dim, j) => {
                 const { positive, label } = parseDimLine(dim)
@@ -586,7 +586,7 @@ function App(): JSX.Element {
                 <p className="result-snippet">{c.snippet}</p>
                 {c.why && c.why.length > 0 && (
                   <div className="why-this-result">
-                    <span className="why-label">Why this match? (SVD latent themes)</span>
+                    <span className="why-label">Why this match?</span>
                     <div className="dim-bars dim-bars-sm">
                       {c.why.map((line, k) => {
                         const { positive, label } = parseDimLine(line)
