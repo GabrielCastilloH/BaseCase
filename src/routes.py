@@ -35,14 +35,29 @@ SVD_MATRIX = SVD_MODEL.fit_transform(TFIDF_MATRIX)
 SVD_MATRIX = normalize(SVD_MATRIX)
 
 FEATURE_NAMES = VECTORIZER.get_feature_names_out()
-# Name latent dimensions by top loading terms (explainability)
+
+# Human-readable names derived from top SVD component loadings
+_DIMENSION_HUMAN_NAMES = {
+    0: "General Litigation",
+    1: "Official Publications / Slip Opinions",
+    2: "Administrative & Agency Appeals",
+    3: "Ohio Trial Proceedings",
+    4: "Federal Summary Judgment (Rule 56)",
+    5: "New York State Court Cases",
+    6: "Employment Discrimination (EEOC)",
+    7: "Medical & Hospital Injury",
+    8: "Copyright & Music Royalties",
+    9: "Slip & Fall / Housing Discrimination",
+}
+
 DIMENSION_LABELS = {}
 _n_label_dims = min(10, SVD_K)
 for i in range(_n_label_dims):
     comp = SVD_MODEL.components_[i]
     top_idx = comp.argsort()[-5:][::-1]
     top_terms = [FEATURE_NAMES[j] for j in top_idx]
-    DIMENSION_LABELS[i] = f"Dimension {i}: {', '.join(top_terms)}"
+    human = _DIMENSION_HUMAN_NAMES.get(i, f"Dimension {i}")
+    DIMENSION_LABELS[i] = f"{human} ({', '.join(top_terms[:3])})"
 
 CLASSIFIER = RuleBasedLegalClassifier(category_keywords)
 
