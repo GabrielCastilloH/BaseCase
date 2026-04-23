@@ -688,21 +688,6 @@ function App(): JSX.Element {
               >
                 <div className="result-meta">
                   <span className={`category-badge badge-${cat}`}>{c.category.replace('_', ' ')}</span>
-                  {useLlm && (
-                    <button
-                      type="button"
-                      className="rag-btn rag-btn-meta"
-                      disabled={ragState.loading || !searchTerm.trim()}
-                      onClick={() => handleRunRag(c, i)}
-                    >
-                      {ragState.loading ? 'Generating...' : hasGenerated ? 'Regenerate' : 'Analyze Case'}
-                    </button>
-                  )}
-                  {c.url && (
-                    <a href={c.url} target="_blank" rel="noopener noreferrer" className="result-link result-link-meta">
-                      see full case →
-                    </a>
-                  )}
                   <span className="similarity-score">match: {(c.similarity * 100).toFixed(0)}%</span>
                 </div>
                 <h3 className="result-title">{c.case_name}</h3>
@@ -730,6 +715,23 @@ function App(): JSX.Element {
                     <RadarChart values={c.dim_activations ?? []} topIdxs={topIdxsFromLabels(c.why ?? [])} size={95} showLabels />
                   </div>
                 )}
+                <div className="rag-actions">
+                  {useLlm && (
+                    <button
+                      type="button"
+                      className="rag-btn"
+                      disabled={ragState.loading || !searchTerm.trim()}
+                      onClick={() => handleRunRag(c, i)}
+                    >
+                      {ragState.loading ? 'Generating...' : hasGenerated ? 'Regenerate' : 'Analyze Case'}
+                    </button>
+                  )}
+                  {c.url && (
+                    <a href={c.url} target="_blank" rel="noopener noreferrer" className="result-link">
+                      see full case →
+                    </a>
+                  )}
+                </div>
                 {(ragState.answer || ragState.error) && (
                   <div className="case-analysis" role="status" aria-live="polite">
                     <div className="case-analysis-header" onClick={() => toggleRagPanel(c, i)}>
