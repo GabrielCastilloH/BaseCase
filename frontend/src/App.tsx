@@ -92,7 +92,7 @@ function RadarChart({ values, topIdxs, size, showLabels = false }: {
   const polyPts = vals.map((v, i) => `${px(i, v).toFixed(2)},${py(i, v).toFixed(2)}`).join(' ')
 
   return (
-    <svg viewBox={`0 0 ${vbox} ${vbox}`} width={size} height={size} className="radar-svg" aria-hidden="true">
+    <svg viewBox={`0 0 ${vbox} ${vbox}`} width={size} height={size} className="radar-svg" overflow="visible" aria-hidden="true">
       {/* Background rings — dashed inner, solid outer */}
       {[0.25, 0.5, 0.75, 1].map(ring => (
         <polygon
@@ -605,8 +605,8 @@ function App(): JSX.Element {
 
         {activatedDimensions.length > 0 && (
           <div className="query-explainability" aria-label="Query latent dimensions">
-            <span className="query-explainability-label">Strongest query themes:</span>
-            <div className="dim-bars-radar-row">
+            <div className="dim-explainability-content">
+              <span className="query-explainability-label">Strongest query themes:</span>
               <div className="dim-bars">
                 {activatedDimensions.map((dim, j) => {
                   const { positive, label } = parseDimLine(dim)
@@ -621,8 +621,8 @@ function App(): JSX.Element {
                   )
                 })}
               </div>
-              <RadarChart values={queryDimActivations} topIdxs={topIdxsFromLabels(activatedDimensions)} size={100} showLabels />
             </div>
+            <RadarChart values={queryDimActivations} topIdxs={topIdxsFromLabels(activatedDimensions)} size={115} showLabels />
           </div>
         )}
 
@@ -695,8 +695,8 @@ function App(): JSX.Element {
                 <p className="result-snippet">{c.snippet}</p>
                 {c.why && c.why.length > 0 && (
                   <div className="why-this-result">
-                    <span className="why-label">Why this match?</span>
-                    <div className="dim-bars-radar-row">
+                    <div className="dim-explainability-content">
+                      <span className="why-label">Why this match?</span>
                       <div className="dim-bars dim-bars-sm">
                         {c.why.map((line, k) => {
                           const { positive, label } = parseDimLine(line)
@@ -711,8 +711,8 @@ function App(): JSX.Element {
                           )
                         })}
                       </div>
-                      <RadarChart values={c.dim_activations ?? []} topIdxs={topIdxsFromLabels(c.why ?? [])} size={85} showLabels />
                     </div>
+                    <RadarChart values={c.dim_activations ?? []} topIdxs={topIdxsFromLabels(c.why ?? [])} size={95} showLabels />
                   </div>
                 )}
                 {(ragState.answer || ragState.error) && (
