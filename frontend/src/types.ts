@@ -9,6 +9,8 @@ export interface LegalCase {
   snippet_is_excerpt?: boolean
   /** SVD latent dimensions activated for this query (explainability) */
   why?: string[]
+  /** Normalized absolute SVD activation for all 10 labeled dims [0..1] */
+  dim_activations?: number[]
 }
 
 /** Classifier + routing; `needs_user_category` prompts pills for low_confidence and no_match */
@@ -31,6 +33,8 @@ export interface SearchResponse {
   confidence: number | null
   /** Top latent semantic dimensions for the query (SVD explainability) */
   activated_dimensions?: string[]
+  /** Normalized absolute SVD activation for all 10 labeled dims [0..1] */
+  query_dim_activations?: number[]
   classification?: ClassificationInfo
   query_used_for_retrieval?: string
   query_rewrite_applied?: boolean
@@ -68,12 +72,27 @@ export interface CaseRagChatRequest {
   messages: DeepDiveMessage[]
 }
 
+export interface SimilarCase {
+  case_idx: number
+  case_name: string
+  category: string
+  similarity: number
+  url: string
+}
+
+export interface SimilarCasesResponse {
+  similar: SimilarCase[]
+  error?: string
+}
+
 export interface DeepDiveState {
   open: boolean
   loading: boolean
   error: string | null
   messages: DeepDiveMessage[]
   draft: string
+  similarCases: SimilarCase[]
+  similarLoading: boolean
 }
 
 export interface SearchRagRequest {

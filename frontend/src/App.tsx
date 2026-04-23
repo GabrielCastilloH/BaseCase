@@ -14,6 +14,8 @@ import {
   SearchRagResponse,
   SearchResponse,
   SearchSynthesisState,
+  SimilarCase,
+  SimilarCasesResponse,
 } from './types'
 
 function categoryClass(cat: string): string {
@@ -51,12 +53,133 @@ function parseDimLine(line: string): { positive: boolean; label: string } {
   const label = line.replace(/^\([+-]\)\s*/, '')
   return { positive, label }
 }
+
+// The 10 named SVD dimensions — must match backend _DIMENSION_HUMAN_NAMES order
+const RADAR_N = 10
+const RADAR_KEYWORDS = ['General','Official','Administrative','Ohio','Federal','New','Employment','Medical','Copyright','Slip'] as const
+const RADAR_SHORT_LABELS = ['Gen. Lit.','Pubs','Admin','Ohio','Fed.','NY','Employ.','Medical','Copyright','Slip/Fall']
+const RADAR_AXIS_LABELS  = ['Gen. Litigation','Publications','Admin/Agency','Ohio Trial','Fed. Summary','New York','Employment','Medical','Copyright','Slip & Fall']
+
+function dimToRadarIdx(label: string): number {
+  const clean = label.replace(/\s*\([^)]*\)\s*$/, '').trim()
+  return RADAR_KEYWORDS.findIndex(kw => clean.startsWith(kw))
+}
+
+function topIdxsFromLabels(dims: string[]): number[] {
+  const out: number[] = []
+  dims.forEach(dim => {
+    const raw = dim.replace(/^\([+-]\)\s*/, '')
+    const idx = dimToRadarIdx(raw)
+    if (idx >= 0) out.push(idx)
+  })
+  return out
+}
+
+function RadarChart({ values, topIdxs, size, showLabels = false, overlayValues }: {
+  values: number[]
+  topIdxs: number[]
+  size: number
+  showLabels?: boolean
+  overlayValues?: number[]
+}): JSX.Element {
+  const vbox = showLabels ? 120 : 100
+  const cx = vbox / 2, cy = vbox / 2
+  const r = showLabels ? 38 : 36
+  const labelR = r * 1.32
+
+  const angle = (i: number) => (i / RADAR_N) * 2 * Math.PI - Math.PI / 2
+  const px = (i: number, v: number) => cx + v * r * Math.cos(angle(i))
+  const py = (i: number, v: number) => cy + v * r * Math.sin(angle(i))
+
+  const vals = Array.from({ length: RADAR_N }, (_, i) => values[i] ?? 0)
+  const polyPts = vals.map((v, i) => `${px(i, v).toFixed(2)},${py(i, v).toFixed(2)}`).join(' ')
+
+  return (
+    <svg viewBox={`0 0 ${vbox} ${vbox}`} width={size} height={size} className="radar-svg" overflow="visible" aria-hidden="true">
+      {/* Background rings — dashed inner, solid outer */}
+      {[0.25, 0.5, 0.75, 1].map(ring => (
+        <polygon
+          key={ring}
+          points={Array.from({ length: RADAR_N }, (_, i) => `${px(i, ring).toFixed(2)},${py(i, ring).toFixed(2)}`).join(' ')}
+          fill="none"
+          stroke={ring === 1 ? '#c0b4ba' : '#e8e0e4'}
+          strokeWidth={ring === 1 ? '0.7' : '0.4'}
+          strokeDasharray={ring < 1 ? '2 2' : undefined}
+        />
+      ))}
+      {/* Axis spokes */}
+      {Array.from({ length: RADAR_N }, (_, i) => (
+        <line key={i} x1={cx} y1={cy}
+          x2={px(i, 1).toFixed(2)} y2={py(i, 1).toFixed(2)}
+          stroke="#ddd4d9" strokeWidth="0.4"
+        />
+      ))}
+      {/* Overlay polygon — query activations, dashed blue-grey */}
+      {overlayValues && overlayValues.length >= RADAR_N && (() => {
+        const oVals = Array.from({ length: RADAR_N }, (_, i) => overlayValues[i] ?? 0)
+        const oPts = oVals.map((v, i) => `${px(i, v).toFixed(2)},${py(i, v).toFixed(2)}`).join(' ')
+        return (
+          <polygon
+            points={oPts}
+            fill="rgba(61,90,122,0.12)"
+            stroke="rgba(61,90,122,0.5)"
+            strokeWidth={showLabels ? '1.2' : '1.0'}
+            strokeLinejoin="round"
+            strokeDasharray="3 2"
+          />
+        )
+      })()}
+      {/* Data polygon */}
+      <polygon
+        points={polyPts}
+        fill="rgba(133,57,83,0.16)"
+        stroke="rgba(133,57,83,0.75)"
+        strokeWidth={showLabels ? '1.5' : '1.2'}
+        strokeLinejoin="round"
+      />
+      {/* Axis labels (query chart only) */}
+      {showLabels && Array.from({ length: RADAR_N }, (_, i) => {
+        const a = angle(i)
+        const lx = cx + labelR * Math.cos(a)
+        const ly = cy + labelR * Math.sin(a)
+        const anchor = Math.cos(a) > 0.3 ? 'start' : Math.cos(a) < -0.3 ? 'end' : 'middle'
+        const baseline = Math.sin(a) > 0.3 ? 'hanging' : Math.sin(a) < -0.3 ? 'auto' : 'middle'
+        const isTop = topIdxs.includes(i)
+        return (
+          <text key={i}
+            x={lx.toFixed(2)} y={ly.toFixed(2)}
+            textAnchor={anchor} dominantBaseline={baseline}
+            fontSize="9.5" fontFamily="IBM Plex Mono, monospace"
+            fill={isTop ? '#853953' : '#b0a0a8'}
+            fontWeight={isTop ? '700' : '400'}
+          >
+            {RADAR_SHORT_LABELS[i]}
+          </text>
+        )
+      })}
+      {/* Top-dim accent dots */}
+      {topIdxs.map((idx, j) => (
+        <circle key={idx}
+          cx={px(idx, vals[idx]).toFixed(2)}
+          cy={py(idx, vals[idx]).toFixed(2)}
+          r={j === 0 ? 3.5 : j === 1 ? 2.6 : 2}
+          fill="#853953"
+          opacity={j === 0 ? 1 : 0.65}
+        >
+          <title>{RADAR_AXIS_LABELS[idx]}</title>
+        </circle>
+      ))}
+    </svg>
+  )
+}
 const EMPTY_DEEP_DIVE_STATE: DeepDiveState = {
   open: false,
   loading: false,
   error: null,
   messages: [],
   draft: '',
+  similarCases: [],
+  similarLoading: false,
 }
 
 function resultKey(c: LegalCase, idx: number): string {
@@ -73,6 +196,7 @@ function App(): JSX.Element {
   const originalQueryRef = useRef<string>('')
   const rewriteCacheRef = useRef<{ original: string; rewritten: string; ts: number } | null>(null)
   const [activatedDimensions, setActivatedDimensions] = useState<string[]>([])
+  const [queryDimActivations, setQueryDimActivations] = useState<number[]>([])
   const [activeCategories, setActiveCategories] = useState<string[]>([])
   const [classification, setClassification] = useState<ClassificationInfo | null>(null)
   const [ragByResult, setRagByResult] = useState<Record<string, CaseRagState>>({})
@@ -96,6 +220,7 @@ function App(): JSX.Element {
       setDeepDiveByResult({})
       setActiveDeepDiveKey(null)
       setActivatedDimensions(data.activated_dimensions ?? [])
+      setQueryDimActivations(data.query_dim_activations ?? [])
       setClassification(data.classification ?? null)
 
       if (useLlm && q.trim() && data.results.length > 0) {
@@ -197,6 +322,29 @@ function App(): JSX.Element {
       }
     })
     setActiveDeepDiveKey(key)
+    document.body.style.overflow = 'hidden'
+
+    const existingState = deepDiveByResult[key] ?? EMPTY_DEEP_DIVE_STATE
+    if (existingState.similarCases.length === 0 && !existingState.similarLoading && c.case_idx != null) {
+      setDeepDiveByResult((prev) => ({
+        ...prev,
+        [key]: { ...(prev[key] ?? EMPTY_DEEP_DIVE_STATE), similarLoading: true },
+      }))
+      fetch(`/api/similar-cases?case_idx=${c.case_idx}&k=4`)
+        .then((r) => r.json())
+        .then((data: SimilarCasesResponse) => {
+          setDeepDiveByResult((prev) => ({
+            ...prev,
+            [key]: { ...(prev[key] ?? EMPTY_DEEP_DIVE_STATE), similarCases: data.similar ?? [], similarLoading: false },
+          }))
+        })
+        .catch(() => {
+          setDeepDiveByResult((prev) => ({
+            ...prev,
+            [key]: { ...(prev[key] ?? EMPTY_DEEP_DIVE_STATE), similarLoading: false },
+          }))
+        })
+    }
   }
 
   const closeDeepDive = (c: LegalCase, idx: number): void => {
@@ -207,6 +355,7 @@ function App(): JSX.Element {
       return { ...prev, [key]: { ...current, open: false } }
     })
     setActiveDeepDiveKey((prev) => (prev === key ? null : prev))
+    document.body.style.overflow = ''
   }
 
   const closeActiveDeepDive = (): void => {
@@ -217,6 +366,7 @@ function App(): JSX.Element {
       return { ...prev, [activeDeepDiveKey]: { ...current, open: false } }
     })
     setActiveDeepDiveKey(null)
+    document.body.style.overflow = ''
   }
 
   const updateDeepDiveDraft = (c: LegalCase, idx: number, draft: string): void => {
@@ -383,6 +533,7 @@ function App(): JSX.Element {
       setDeepDiveByResult({})
       setActiveDeepDiveKey(null)
       setActivatedDimensions(data.activated_dimensions ?? [])
+      setQueryDimActivations(data.query_dim_activations ?? [])
       setClassification(data.classification ?? null)
 
       if (useLlm && data.results.length > 0) {
@@ -499,21 +650,24 @@ function App(): JSX.Element {
 
         {activatedDimensions.length > 0 && (
           <div className="query-explainability" aria-label="Query latent dimensions">
-            <span className="query-explainability-label">Strongest query themes (SVD):</span>
-            <div className="dim-bars">
-              {activatedDimensions.map((dim, j) => {
-                const { positive, label } = parseDimLine(dim)
-                return (
-                  <div key={j} className={`dim-bar-row ${positive ? 'dim-pos' : 'dim-neg'}`}>
-                    <span className="dim-sign">{positive ? '+' : '−'}</span>
-                    <div className="dim-track">
-                      <div className="dim-fill" style={{ width: `${100 - j * 28}%` }} />
+            <div className="dim-explainability-content">
+              <span className="query-explainability-label">Strongest query themes:</span>
+              <div className="dim-bars">
+                {activatedDimensions.map((dim, j) => {
+                  const { positive, label } = parseDimLine(dim)
+                  return (
+                    <div key={j} className={`dim-bar-row ${positive ? 'dim-pos' : 'dim-neg'}`}>
+                      <span className="dim-sign">{positive ? '+' : '−'}</span>
+                      <div className="dim-track">
+                        <div className="dim-fill" style={{ width: `${100 - j * 28}%` }} />
+                      </div>
+                      <span className="dim-text">{label}</span>
                     </div>
-                    <span className="dim-text">{label}</span>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
+            <RadarChart values={queryDimActivations} topIdxs={topIdxsFromLabels(activatedDimensions)} size={115} showLabels />
           </div>
         )}
 
@@ -564,74 +718,77 @@ function App(): JSX.Element {
               >
                 <div className="result-meta">
                   <span className={`category-badge badge-${cat}`}>{c.category.replace('_', ' ')}</span>
-                  <span className="similarity-score">match: {(c.similarity * 100).toFixed(0)}%</span>
-                </div>
-                <h3 className="result-title">{c.case_name}</h3>
-                {c.snippet_is_excerpt && (
-                  <p className="snippet-excerpt-hint">Excerpt aligned to your search</p>
-                )}
-                <p className="result-snippet">{c.snippet}</p>
-                {c.why && c.why.length > 0 && (
-                  <div className="why-this-result">
-                    <span className="why-label">Why this match? (SVD latent themes)</span>
-                    <div className="dim-bars dim-bars-sm">
-                      {c.why.map((line, k) => {
-                        const { positive, label } = parseDimLine(line)
-                        return (
-                          <div key={k} className={`dim-bar-row ${positive ? 'dim-pos' : 'dim-neg'}`}>
-                            <span className="dim-sign">{positive ? '+' : '−'}</span>
-                            <div className="dim-track">
-                              <div className="dim-fill" style={{ width: `${100 - k * 25}%` }} />
-                            </div>
-                            <span className="dim-text">{label}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-                {c.url && (
-                  <a href={c.url} target="_blank" rel="noopener noreferrer" className="result-link">
-                    view on CourtListener →
-                  </a>
-                )}
-                {useLlm && (
-                  <div className="rag-actions">
+                  {useLlm && (
                     <button
                       type="button"
-                      className="rag-btn"
+                      className="rag-btn rag-btn-meta"
                       disabled={ragState.loading || !searchTerm.trim()}
                       onClick={() => handleRunRag(c, i)}
                     >
                       {ragState.loading ? 'Generating...' : hasGenerated ? 'Regenerate' : 'Analyze Case'}
                     </button>
-                    {hasGenerated && (
-                      <button
-                        type="button"
-                        className="rag-toggle-btn"
-                        onClick={() => toggleRagPanel(c, i)}
-                      >
-                        {ragState.expanded ? 'Hide' : 'Show'}
-                      </button>
-                    )}
-                    {ragState.answer && (
-                      <button
-                        type="button"
-                        className="rag-toggle-btn"
-                        onClick={() => (diveState.open ? closeDeepDive(c, i) : openDeepDive(c, i))}
-                      >
-                        {diveState.open ? 'Close Deep Dive' : 'Deep Dive'}
-                      </button>
-                    )}
+                  )}
+                  {c.url && (
+                    <a href={c.url} target="_blank" rel="noopener noreferrer" className="result-link result-link-meta">
+                      see full case →
+                    </a>
+                  )}
+                  <span className="similarity-score">match: {(c.similarity * 100).toFixed(0)}%</span>
+                </div>
+                <h3 className="result-title">{c.case_name}</h3>
+
+                <p className="result-snippet">{c.snippet}</p>
+                {c.why && c.why.length > 0 && (
+                  <div className="why-this-result">
+                    <div className="dim-explainability-content">
+                      <span className="why-label">Why this match?</span>
+                      <div className="dim-bars dim-bars-sm">
+                        {c.why.map((line, k) => {
+                          const { positive, label } = parseDimLine(line)
+                          return (
+                            <div key={k} className={`dim-bar-row ${positive ? 'dim-pos' : 'dim-neg'}`}>
+                              <span className="dim-sign">{positive ? '+' : '−'}</span>
+                              <div className="dim-track">
+                                <div className="dim-fill" style={{ width: `${100 - k * 25}%` }} />
+                              </div>
+                              <span className="dim-text">{label}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <RadarChart values={c.dim_activations ?? []} topIdxs={topIdxsFromLabels(c.why ?? [])} size={95} showLabels />
                   </div>
                 )}
-                {ragState.expanded && (ragState.answer || ragState.error) && (
-                  <div className="rag-panel" role="status" aria-live="polite">
-                    {ragState.error ? (
-                      <p className="rag-error">{ragState.error}</p>
-                    ) : (
-                      <div className="rag-answer">
-                        <ReactMarkdown>{ragState.answer ?? ''}</ReactMarkdown>
+                {(ragState.answer || ragState.error) && (
+                  <div className="case-analysis" role="status" aria-live="polite">
+                    <div className="case-analysis-header" onClick={() => toggleRagPanel(c, i)}>
+                      <span className="case-analysis-title">
+                        <span className="case-analysis-chevron">{ragState.expanded ? '▼' : '▶'}</span>
+                        Case Analysis
+                      </span>
+                      {ragState.answer && (
+                        <button
+                          type="button"
+                          className="deep-dive-trigger"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            diveState.open ? closeDeepDive(c, i) : openDeepDive(c, i)
+                          }}
+                        >
+                          {diveState.open ? 'Close Deep Dive' : 'Deep Dive →'}
+                        </button>
+                      )}
+                    </div>
+                    {ragState.expanded && (
+                      <div className="rag-panel">
+                        {ragState.error ? (
+                          <p className="rag-error">{ragState.error}</p>
+                        ) : (
+                          <div className="rag-answer">
+                            <ReactMarkdown>{ragState.answer ?? ''}</ReactMarkdown>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -640,65 +797,183 @@ function App(): JSX.Element {
             )
           })}
         </div>
-        {activeDeepDiveContext && activeDeepDiveKey && (deepDiveByResult[activeDeepDiveKey]?.open ?? false) && (
-          <div className="deep-dive-overlay" onClick={closeActiveDeepDive}>
-            <div className="deep-dive-panel deep-dive-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="deep-dive-header">
-                <span>Deep Dive: {activeDeepDiveContext.caseItem.case_name}</span>
-                <button
-                  type="button"
-                  className="deep-dive-close"
-                  onClick={closeActiveDeepDive}
-                >
-                  close
-                </button>
-              </div>
-              <div className="deep-dive-messages" ref={deepDiveMessagesRef}>
-                {(deepDiveByResult[activeDeepDiveKey]?.messages ?? []).map((m, mIdx) => (
-                  <div
-                    key={`${m.role}-${mIdx}`}
-                    className={`deep-dive-bubble ${m.role === 'user' ? 'deep-dive-user' : 'deep-dive-assistant'}`}
-                  >
-                    {m.content}
+        {activeDeepDiveContext && activeDeepDiveKey && (deepDiveByResult[activeDeepDiveKey]?.open ?? false) && (() => {
+          const { caseItem: c, idx } = activeDeepDiveContext
+          const diveState = deepDiveByResult[activeDeepDiveKey] ?? EMPTY_DEEP_DIVE_STATE
+          const cat = categoryClass(c.category)
+          const topIdxs = topIdxsFromLabels(c.why ?? [])
+          return (
+            <div className="deep-dive-overlay" onClick={closeActiveDeepDive}>
+              <div className="deep-dive-modal deep-dive-modal--two-panel" onClick={(e) => e.stopPropagation()}>
+
+                {/* ── LEFT PANEL ─────────────────────────────────── */}
+                <div className="dd-left-panel">
+
+                  {/* Case Header */}
+                  <div className="dd-case-header">
+                    <div className="dd-case-header-top">
+                      <span className={`category-badge badge-${cat} dd-category-badge`}>
+                        {c.category.replace(/_/g, ' ')}
+                      </span>
+                      <span className="dd-similarity-badge">
+                        {(c.similarity * 100).toFixed(0)}% match
+                      </span>
+                      {c.url && (
+                        <a
+                          href={c.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="dd-external-link"
+                        >
+                          See full opinion ↗
+                        </a>
+                      )}
+                    </div>
+                    <h2 className="dd-case-title">{c.case_name}</h2>
                   </div>
-                ))}
-                {deepDiveByResult[activeDeepDiveKey]?.loading && (
-                  <div className="deep-dive-bubble deep-dive-assistant">Thinking...</div>
-                )}
-              </div>
-              {deepDiveByResult[activeDeepDiveKey]?.error && (
-                <p className="deep-dive-error">{deepDiveByResult[activeDeepDiveKey]?.error}</p>
-              )}
-              <div className="deep-dive-input-row">
-                <textarea
-                  ref={deepDiveInputRef}
-                  className="deep-dive-input"
-                  value={deepDiveByResult[activeDeepDiveKey]?.draft ?? ''}
-                  placeholder="Ask a follow-up about this case..."
-                  onChange={(e) => updateDeepDiveDraft(activeDeepDiveContext.caseItem, activeDeepDiveContext.idx, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      sendDeepDiveMessage(activeDeepDiveContext.caseItem, activeDeepDiveContext.idx)
-                    }
-                  }}
-                  rows={2}
-                />
-                <button
-                  type="button"
-                  className="deep-dive-send"
-                  onClick={() => sendDeepDiveMessage(activeDeepDiveContext.caseItem, activeDeepDiveContext.idx)}
-                  disabled={
-                    Boolean(deepDiveByResult[activeDeepDiveKey]?.loading) ||
-                    !(deepDiveByResult[activeDeepDiveKey]?.draft ?? '').trim()
-                  }
-                >
-                  Send
-                </button>
+
+                  {/* Dual-Polygon Radar */}
+                  <div className="dd-section dd-radar-section">
+                    <span className="dd-section-label">Semantic Profile</span>
+                    <div className="dd-radar-wrap">
+                      <RadarChart
+                        values={c.dim_activations ?? []}
+                        topIdxs={topIdxs}
+                        size={200}
+                        showLabels
+                        overlayValues={queryDimActivations}
+                      />
+                    </div>
+                    <div className="dd-radar-legend">
+                      <span className="dd-legend-case">&#8212; case</span>
+                      <span className="dd-legend-query">&#8211; &#8211; query</span>
+                    </div>
+                  </div>
+
+                  {/* Key Dimensions */}
+                  {c.why && c.why.length > 0 && (
+                    <div className="dd-section dd-dims-section">
+                      <span className="dd-section-label">Key Dimensions</span>
+                      <div className="dim-bars">
+                        {c.why.map((line, k) => {
+                          const { positive, label } = parseDimLine(line)
+                          const dimIdx = dimToRadarIdx(label.replace(/\s*\([^)]*\)\s*$/, '').trim())
+                          const barWidth = dimIdx >= 0 && c.dim_activations
+                            ? Math.round((c.dim_activations[dimIdx] ?? 0) * 100)
+                            : Math.max(0, 100 - k * 22)
+                          return (
+                            <div key={k} className={`dim-bar-row ${positive ? 'dim-pos' : 'dim-neg'}`}>
+                              <span className="dim-sign">{positive ? '+' : '−'}</span>
+                              <div className="dim-track">
+                                <div className="dim-fill" style={{ width: `${barWidth}%` }} />
+                              </div>
+                              <span className="dim-text">{label}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Relevant Excerpt */}
+                  <div className="dd-section dd-snippet-section">
+                    <span className="dd-section-label">
+                      Relevant Excerpt
+                      {c.snippet_is_excerpt && <span className="dd-excerpt-hint"> · TF-IDF aligned</span>}
+                    </span>
+                    <blockquote className="dd-snippet-quote">{c.snippet}</blockquote>
+                  </div>
+
+                  {/* Similar Cases */}
+                  <div className="dd-section dd-similar-section">
+                    <span className="dd-section-label">Similar Cases</span>
+                    {diveState.similarLoading && (
+                      <p className="dd-similar-loading">Loading…</p>
+                    )}
+                    {!diveState.similarLoading && diveState.similarCases.length === 0 && (
+                      <p className="dd-similar-empty">No similar cases found.</p>
+                    )}
+                    {diveState.similarCases.map((sc: SimilarCase) => (
+                      <a
+                        key={sc.case_idx}
+                        href={sc.url || undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`dd-similar-card${sc.url ? ' dd-similar-card--link' : ''}`}
+                      >
+                        <div className="dd-similar-name-row">
+                          <span className="dd-similar-name">{sc.case_name}</span>
+                          <span className="dd-similar-score">{(sc.similarity * 100).toFixed(0)}%</span>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+
+                </div>
+
+                {/* ── RIGHT PANEL ────────────────────────────────── */}
+                <div className="dd-right-panel">
+
+                  <div className="deep-dive-header">
+                    <div className="deep-dive-header-info">
+                      <span className="deep-dive-label">Deep Dive</span>
+                      <span className="deep-dive-case-name">{c.case_name}</span>
+                    </div>
+                    <button type="button" className="deep-dive-close" onClick={closeActiveDeepDive}>✕</button>
+                  </div>
+
+                  <div className="deep-dive-messages" ref={deepDiveMessagesRef}>
+                    {diveState.messages.map((m, mIdx) => (
+                      <div
+                        key={`${m.role}-${mIdx}`}
+                        className={`deep-dive-bubble ${m.role === 'user' ? 'deep-dive-user' : 'deep-dive-assistant'}`}
+                      >
+                        {m.role === 'assistant'
+                          ? <div className="deep-dive-md"><ReactMarkdown>{m.content}</ReactMarkdown></div>
+                          : m.content
+                        }
+                      </div>
+                    ))}
+                    {diveState.loading && (
+                      <div className="deep-dive-bubble deep-dive-assistant deep-dive-thinking">Thinking…</div>
+                    )}
+                  </div>
+
+                  {diveState.error && (
+                    <p className="deep-dive-error">{diveState.error}</p>
+                  )}
+
+                  <div className="deep-dive-input-row">
+                    <textarea
+                      ref={deepDiveInputRef}
+                      className="deep-dive-input"
+                      value={diveState.draft}
+                      placeholder="Ask a follow-up about this case… (Enter to send)"
+                      onChange={(e) => updateDeepDiveDraft(c, idx, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          sendDeepDiveMessage(c, idx)
+                        }
+                      }}
+                      rows={2}
+                    />
+                    <button
+                      type="button"
+                      className="deep-dive-send"
+                      onClick={() => sendDeepDiveMessage(c, idx)}
+                      disabled={Boolean(diveState.loading) || !diveState.draft.trim()}
+                    >
+                      Send
+                    </button>
+                  </div>
+
+                </div>
+
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </main>
     </>
   )
