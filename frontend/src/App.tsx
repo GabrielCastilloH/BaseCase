@@ -79,10 +79,10 @@ function RadarChart({ values, topIdxs, size, showLabels = false }: {
   size: number
   showLabels?: boolean
 }): JSX.Element {
-  const vbox = showLabels ? 170 : 100
+  const vbox = showLabels ? 120 : 100
   const cx = vbox / 2, cy = vbox / 2
-  const r = showLabels ? 54 : 36
-  const labelR = r * 1.3
+  const r = showLabels ? 38 : 36
+  const labelR = r * 1.32
 
   const angle = (i: number) => (i / RADAR_N) * 2 * Math.PI - Math.PI / 2
   const px = (i: number, v: number) => cx + v * r * Math.cos(angle(i))
@@ -131,7 +131,7 @@ function RadarChart({ values, topIdxs, size, showLabels = false }: {
           <text key={i}
             x={lx.toFixed(2)} y={ly.toFixed(2)}
             textAnchor={anchor} dominantBaseline={baseline}
-            fontSize="7.2" fontFamily="IBM Plex Mono, monospace"
+            fontSize="9.5" fontFamily="IBM Plex Mono, monospace"
             fill={isTop ? '#853953' : '#b0a0a8'}
             fontWeight={isTop ? '700' : '400'}
           >
@@ -621,7 +621,7 @@ function App(): JSX.Element {
                   )
                 })}
               </div>
-              <RadarChart values={queryDimActivations} topIdxs={topIdxsFromLabels(activatedDimensions)} size={150} showLabels />
+              <RadarChart values={queryDimActivations} topIdxs={topIdxsFromLabels(activatedDimensions)} size={100} showLabels />
             </div>
           </div>
         )}
@@ -711,7 +711,7 @@ function App(): JSX.Element {
                           )
                         })}
                       </div>
-                      <RadarChart values={c.dim_activations ?? []} topIdxs={topIdxsFromLabels(c.why ?? [])} size={90} />
+                      <RadarChart values={c.dim_activations ?? []} topIdxs={topIdxsFromLabels(c.why ?? [])} size={85} showLabels />
                     </div>
                   </div>
                 )}
