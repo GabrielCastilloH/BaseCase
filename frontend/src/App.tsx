@@ -50,6 +50,9 @@ function resultKey(c: LegalCase, idx: number): string {
 function App(): JSX.Element {
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [results, setResults] = useState<LegalCase[]>([])
+  const [searchBusy, setSearchBusy] = useState<boolean>(false)
+  const [rewriteActive, setRewriteActive] = useState<boolean>(false)
+  const [queryUsedForRetrieval, setQueryUsedForRetrieval] = useState<string | null>(null)
   const [detectedCategory, setDetectedCategory] = useState<string | null>(null)
   const [confidence, setConfidence] = useState<number | null>(null)
   const [activatedDimensions, setActivatedDimensions] = useState<string[]>([])
@@ -62,22 +65,34 @@ function App(): JSX.Element {
   const deepDiveMessagesRef = useRef<HTMLDivElement>(null)
   const [activeDeepDiveKey, setActiveDeepDiveKey] = useState<string | null>(null)
 
-  const fetchResults = async (q: string, categories: string[]): Promise<void> => {
+  const fetchResults = async (
+    q: string,
+    categories: string[],
+    opts?: { rewrite?: boolean },
+  ): Promise<void> => {
     const params = new URLSearchParams()
     if (q.trim()) params.set('q', q)
+    if (opts?.rewrite && q.trim()) params.set('rewrite', '1')
     for (const c of categories) {
       params.append('category', c)
     }
-    const response = await fetch(`/api/search?${params.toString()}`)
-    const data: SearchResponse = await response.json()
-    setResults(data.results)
-    setRagByResult({})
-    setDeepDiveByResult({})
-    setActiveDeepDiveKey(null)
-    setDetectedCategory(data.detected_category)
-    setConfidence(data.confidence)
-    setActivatedDimensions(data.activated_dimensions ?? [])
-    setClassification(data.classification ?? null)
+    setSearchBusy(true)
+    try {
+      const response = await fetch(`/api/search?${params.toString()}`)
+      const data: SearchResponse = await response.json()
+      setResults(data.results)
+      setRagByResult({})
+      setDeepDiveByResult({})
+      setActiveDeepDiveKey(null)
+      setDetectedCategory(data.detected_category)
+      setConfidence(data.confidence)
+      setActivatedDimensions(data.activated_dimensions ?? [])
+      setClassification(data.classification ?? null)
+      setQueryUsedForRetrieval(data.query_used_for_retrieval ?? null)
+      setRewriteActive(Boolean(data.query_rewrite_applied))
+    } finally {
+      setSearchBusy(false)
+    }
   }
 
   const handleRunRag = async (c: LegalCase, idx: number): Promise<void> => {
@@ -280,11 +295,20 @@ function App(): JSX.Element {
 
   const handleSearch = (value: string): void => {
     setSearchTerm(value)
-    fetchResults(value, activeCategories)
+    setRewriteActive(false)
+    setQueryUsedForRetrieval(null)
+    fetchResults(value, activeCategories, { rewrite: false })
     if (!value.trim()) {
       setDetectedCategory(null)
       setActivatedDimensions([])
     }
+  }
+
+  const runAiRewriteSearch = (): void => {
+    const q = searchTerm.trim()
+    if (!q || searchBusy) return
+    const nextRewrite = !rewriteActive
+    fetchResults(searchTerm, activeCategories, { rewrite: nextRewrite })
   }
 
   const handlePillClick = (key: string): void => {
@@ -292,7 +316,7 @@ function App(): JSX.Element {
       ? activeCategories.filter((k) => k !== key)
       : [...activeCategories, key]
     setActiveCategories(next)
-    fetchResults(searchTerm, next)
+    fetchResults(searchTerm, next, { rewrite: rewriteActive && Boolean(searchTerm.trim()) })
   }
 
   return (
@@ -339,6 +363,26 @@ function App(): JSX.Element {
             spellCheck
             aria-label="Describe your legal situation"
           />
+        </div>
+        <div className="search-actions">
+          <button
+            type="button"
+            className="rewrite-search-btn"
+            onClick={runAiRewriteSearch}
+            disabled={!searchTerm.trim() || searchBusy}
+          >
+            {searchBusy
+              ? 'Searching...'
+              : rewriteActive
+                ? 'Use Original Query'
+                : 'AI Rewrite Search'}
+          </button>
+          {searchTerm.trim() && (
+            <p className="rewrite-note">
+              Searching with {rewriteActive ? 'AI rewritten query' : 'original query'}:{' '}
+              {queryUsedForRetrieval ?? searchTerm.trim()}
+            </p>
+          )}
         </div>
 
         {detectedCategory && (
