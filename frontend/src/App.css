@@ -834,7 +834,24 @@ body {
   white-space: pre-wrap;
 }
 
-/* ── SVD Dimension Bars ──────────────────────────────────────────── */
+/* ── SVD Dimension Bars + Radar ─────────────────────────────────── */
+.dim-bars-radar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 0.4rem;
+}
+
+.dim-bars-radar-row .dim-bars {
+  flex: 1;
+  margin-top: 0;
+}
+
+.radar-svg {
+  flex-shrink: 0;
+  opacity: 0.92;
+}
+
 .dim-bars {
   display: flex;
   flex-direction: column;
