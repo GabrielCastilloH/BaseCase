@@ -812,8 +812,11 @@ function App(): JSX.Element {
                   {/* Case Header */}
                   <div className="dd-case-header">
                     <div className="dd-case-header-top">
-                      <span className={`category-badge badge-${cat}`}>
+                      <span className={`category-badge badge-${cat} dd-category-badge`}>
                         {c.category.replace(/_/g, ' ')}
+                      </span>
+                      <span className="dd-similarity-badge">
+                        {(c.similarity * 100).toFixed(0)}% match
                       </span>
                       {c.url && (
                         <a
@@ -826,12 +829,7 @@ function App(): JSX.Element {
                         </a>
                       )}
                     </div>
-                    <div className="dd-case-title-row">
-                      <h2 className="dd-case-title">{c.case_name}</h2>
-                      <span className="dd-similarity-badge">
-                        {(c.similarity * 100).toFixed(0)}% match
-                      </span>
-                    </div>
+                    <h2 className="dd-case-title">{c.case_name}</h2>
                   </div>
 
                   {/* Dual-Polygon Radar */}
@@ -903,10 +901,10 @@ function App(): JSX.Element {
                         rel="noopener noreferrer"
                         className={`dd-similar-card${sc.url ? ' dd-similar-card--link' : ''}`}
                       >
-                        <div className="dd-similar-card-meta">
-                          <span className="dd-similar-score">{(sc.similarity * 100).toFixed(0)}% match</span>
+                        <div className="dd-similar-name-row">
+                          <span className="dd-similar-name">{sc.case_name}</span>
+                          <span className="dd-similar-score">{(sc.similarity * 100).toFixed(0)}%</span>
                         </div>
-                        <p className="dd-similar-name">{sc.case_name}</p>
                       </a>
                     ))}
                   </div>

@@ -813,27 +813,18 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  margin-bottom: 0.55rem;
   flex-wrap: wrap;
 }
 
 .dd-similarity-badge {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--color-accent);
   border: 1px solid var(--color-accent);
   padding: 0.1rem 0.45rem;
   background: rgba(133, 57, 83, 0.06);
-  white-space: nowrap;
-  flex-shrink: 0;
-  align-self: flex-start;
-}
-
-.dd-case-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  margin-top: 0.45rem;
 }
 
 .dd-case-title {
@@ -842,7 +833,6 @@ body {
   color: var(--color-text-primary);
   line-height: 1.4;
   margin: 0;
-  flex: 1;
 }
 
 .dd-section {
@@ -940,17 +930,18 @@ body {
   background: rgba(133, 57, 83, 0.05);
 }
 
-.dd-similar-card-meta {
+.dd-similar-name-row {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.2rem;
+  align-items: baseline;
+  gap: 0.5rem;
 }
 
 .dd-similar-score {
-  font-size: 0.65rem;
+  flex-shrink: 0;
+  margin-left: auto;
+  font-size: 0.62rem;
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-text-muted);
   letter-spacing: 0.04em;
 }
 
@@ -959,7 +950,6 @@ body {
   font-weight: 500;
   color: var(--color-text-primary);
   line-height: 1.4;
-  margin: 0;
 }
 
 .dd-external-link {
