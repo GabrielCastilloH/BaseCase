@@ -70,7 +70,8 @@ function App(): JSX.Element {
   const [searchBusy, setSearchBusy] = useState<boolean>(false)
   const [searchSynthesis, setSearchSynthesis] = useState<SearchSynthesisState>(EMPTY_SYNTHESIS_STATE)
   const [rewriteActive, setRewriteActive] = useState<boolean>(false)
-  const [queryUsedForRetrieval, setQueryUsedForRetrieval] = useState<string | null>(null)
+  const originalQueryRef = useRef<string>('')
+  const rewriteCacheRef = useRef<{ original: string; rewritten: string; ts: number } | null>(null)
   const [activatedDimensions, setActivatedDimensions] = useState<string[]>([])
   const [activeCategories, setActiveCategories] = useState<string[]>([])
   const [classification, setClassification] = useState<ClassificationInfo | null>(null)
@@ -81,17 +82,10 @@ function App(): JSX.Element {
   const deepDiveMessagesRef = useRef<HTMLDivElement>(null)
   const [activeDeepDiveKey, setActiveDeepDiveKey] = useState<string | null>(null)
 
-  const fetchResults = async (
-    q: string,
-    categories: string[],
-    opts?: { rewrite?: boolean },
-  ): Promise<void> => {
+  const fetchResults = async (q: string, categories: string[]): Promise<void> => {
     const params = new URLSearchParams()
     if (q.trim()) params.set('q', q)
-    if (opts?.rewrite && q.trim()) params.set('rewrite', '1')
-    for (const c of categories) {
-      params.append('category', c)
-    }
+    for (const c of categories) params.append('category', c)
     setSearchBusy(true)
     setSearchSynthesis(EMPTY_SYNTHESIS_STATE)
     try {
@@ -103,8 +97,6 @@ function App(): JSX.Element {
       setActiveDeepDiveKey(null)
       setActivatedDimensions(data.activated_dimensions ?? [])
       setClassification(data.classification ?? null)
-      setQueryUsedForRetrieval(data.query_used_for_retrieval ?? null)
-      setRewriteActive(Boolean(data.query_rewrite_applied))
 
       if (useLlm && q.trim() && data.results.length > 0) {
         setSearchSynthesis({ loading: true, text: null, error: null, expanded: true })
@@ -345,20 +337,73 @@ function App(): JSX.Element {
   }, [searchTerm])
 
   const handleSearch = (value: string): void => {
-    setSearchTerm(value)
-    setRewriteActive(false)
-    setQueryUsedForRetrieval(null)
-    fetchResults(value, activeCategories, { rewrite: false })
-    if (!value.trim()) {
-      setActivatedDimensions([])
+    if (rewriteActive) {
+      setRewriteActive(false)
     }
+    setSearchTerm(value)
+    fetchResults(value, activeCategories)
+    if (!value.trim()) setActivatedDimensions([])
   }
 
-  const runAiRewriteSearch = (): void => {
+  const handleEnhanceToggle = async (): Promise<void> => {
+    if (rewriteActive) {
+      const orig = originalQueryRef.current
+      setSearchTerm(orig)
+      setRewriteActive(false)
+      fetchResults(orig, activeCategories)
+      return
+    }
+
     const q = searchTerm.trim()
     if (!q || searchBusy) return
-    const nextRewrite = !rewriteActive
-    fetchResults(searchTerm, activeCategories, { rewrite: nextRewrite })
+
+    const cache = rewriteCacheRef.current
+    if (cache && cache.original === q && Date.now() - cache.ts < 60_000) {
+      originalQueryRef.current = q
+      setSearchTerm(cache.rewritten)
+      setRewriteActive(true)
+      fetchResults(cache.rewritten, activeCategories)
+      return
+    }
+
+    originalQueryRef.current = q
+    setSearchBusy(true)
+    setSearchSynthesis(EMPTY_SYNTHESIS_STATE)
+    try {
+      const params = new URLSearchParams({ q, rewrite: '1' })
+      for (const c of activeCategories) params.append('category', c)
+      const response = await fetch(`/api/search?${params}`)
+      const data: SearchResponse = await response.json()
+      const rewritten = data.query_used_for_retrieval ?? q
+      rewriteCacheRef.current = { original: q, rewritten, ts: Date.now() }
+      setSearchTerm(rewritten)
+      setRewriteActive(true)
+      setResults(data.results)
+      setRagByResult({})
+      setDeepDiveByResult({})
+      setActiveDeepDiveKey(null)
+      setActivatedDimensions(data.activated_dimensions ?? [])
+      setClassification(data.classification ?? null)
+
+      if (useLlm && data.results.length > 0) {
+        setSearchSynthesis({ loading: true, text: null, error: null, expanded: true })
+        const casesPayload = data.results.slice(0, 5).map((r) => ({ name: r.case_name, snippet: r.snippet }))
+        fetch('/api/search-rag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_query: q, cases: casesPayload }),
+        })
+          .then((r) => r.json())
+          .then((d: SearchRagResponse) => {
+            setSearchSynthesis({ loading: false, text: d.synthesis ?? null, error: d.error ?? null, expanded: true })
+          })
+          .catch(() => {
+            setSearchSynthesis({ loading: false, text: null, error: 'Failed to generate AI summary.', expanded: true })
+          })
+      }
+    } finally {
+      setSearchBusy(false)
+    }
   }
 
   const handlePillClick = (key: string): void => {
@@ -366,7 +411,7 @@ function App(): JSX.Element {
       ? activeCategories.filter((k) => k !== key)
       : [...activeCategories, key]
     setActiveCategories(next)
-    fetchResults(searchTerm, next, { rewrite: rewriteActive && Boolean(searchTerm.trim()) })
+    fetchResults(searchTerm, next)
   }
 
   return (
@@ -427,7 +472,7 @@ function App(): JSX.Element {
             <button
               type="button"
               className={`enhance-btn${rewriteActive ? ' enhance-btn-active' : ''}`}
-              onClick={runAiRewriteSearch}
+              onClick={handleEnhanceToggle}
               disabled={!searchTerm.trim() || searchBusy}
               title={rewriteActive ? 'Switch back to original query' : 'Rewrite query with AI for better results'}
             >
@@ -436,15 +481,6 @@ function App(): JSX.Element {
               </svg>
               {rewriteActive ? 'AI Enhanced' : 'AI Enhance'}
             </button>
-          )}
-        </div>
-        <div className="search-actions">
-          {searchTerm.trim() && (
-            <p className="rewrite-note">
-              {rewriteActive
-                ? <>AI rewritten: <em>{queryUsedForRetrieval ?? searchTerm.trim()}</em></>
-                : <>Original query</>}
-            </p>
           )}
         </div>
 
