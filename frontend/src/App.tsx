@@ -14,6 +14,8 @@ import {
   SearchRagResponse,
   SearchResponse,
   SearchSynthesisState,
+  SimilarCase,
+  SimilarCasesResponse,
 } from './types'
 
 function categoryClass(cat: string): string {
@@ -73,11 +75,12 @@ function topIdxsFromLabels(dims: string[]): number[] {
   return out
 }
 
-function RadarChart({ values, topIdxs, size, showLabels = false }: {
+function RadarChart({ values, topIdxs, size, showLabels = false, overlayValues }: {
   values: number[]
   topIdxs: number[]
   size: number
   showLabels?: boolean
+  overlayValues?: number[]
 }): JSX.Element {
   const vbox = showLabels ? 120 : 100
   const cx = vbox / 2, cy = vbox / 2
@@ -111,6 +114,21 @@ function RadarChart({ values, topIdxs, size, showLabels = false }: {
           stroke="#ddd4d9" strokeWidth="0.4"
         />
       ))}
+      {/* Overlay polygon — query activations, dashed blue-grey */}
+      {overlayValues && overlayValues.length >= RADAR_N && (() => {
+        const oVals = Array.from({ length: RADAR_N }, (_, i) => overlayValues[i] ?? 0)
+        const oPts = oVals.map((v, i) => `${px(i, v).toFixed(2)},${py(i, v).toFixed(2)}`).join(' ')
+        return (
+          <polygon
+            points={oPts}
+            fill="rgba(61,90,122,0.12)"
+            stroke="rgba(61,90,122,0.5)"
+            strokeWidth={showLabels ? '1.2' : '1.0'}
+            strokeLinejoin="round"
+            strokeDasharray="3 2"
+          />
+        )
+      })()}
       {/* Data polygon */}
       <polygon
         points={polyPts}
@@ -160,6 +178,8 @@ const EMPTY_DEEP_DIVE_STATE: DeepDiveState = {
   error: null,
   messages: [],
   draft: '',
+  similarCases: [],
+  similarLoading: false,
 }
 
 function resultKey(c: LegalCase, idx: number): string {
@@ -302,6 +322,29 @@ function App(): JSX.Element {
       }
     })
     setActiveDeepDiveKey(key)
+    document.body.style.overflow = 'hidden'
+
+    const existingState = deepDiveByResult[key] ?? EMPTY_DEEP_DIVE_STATE
+    if (existingState.similarCases.length === 0 && !existingState.similarLoading && c.case_idx != null) {
+      setDeepDiveByResult((prev) => ({
+        ...prev,
+        [key]: { ...(prev[key] ?? EMPTY_DEEP_DIVE_STATE), similarLoading: true },
+      }))
+      fetch(`/api/similar-cases?case_idx=${c.case_idx}&k=4`)
+        .then((r) => r.json())
+        .then((data: SimilarCasesResponse) => {
+          setDeepDiveByResult((prev) => ({
+            ...prev,
+            [key]: { ...(prev[key] ?? EMPTY_DEEP_DIVE_STATE), similarCases: data.similar ?? [], similarLoading: false },
+          }))
+        })
+        .catch(() => {
+          setDeepDiveByResult((prev) => ({
+            ...prev,
+            [key]: { ...(prev[key] ?? EMPTY_DEEP_DIVE_STATE), similarLoading: false },
+          }))
+        })
+    }
   }
 
   const closeDeepDive = (c: LegalCase, idx: number): void => {
@@ -312,6 +355,7 @@ function App(): JSX.Element {
       return { ...prev, [key]: { ...current, open: false } }
     })
     setActiveDeepDiveKey((prev) => (prev === key ? null : prev))
+    document.body.style.overflow = ''
   }
 
   const closeActiveDeepDive = (): void => {
@@ -322,6 +366,7 @@ function App(): JSX.Element {
       return { ...prev, [activeDeepDiveKey]: { ...current, open: false } }
     })
     setActiveDeepDiveKey(null)
+    document.body.style.overflow = ''
   }
 
   const updateDeepDiveDraft = (c: LegalCase, idx: number, draft: string): void => {
@@ -752,68 +797,183 @@ function App(): JSX.Element {
             )
           })}
         </div>
-        {activeDeepDiveContext && activeDeepDiveKey && (deepDiveByResult[activeDeepDiveKey]?.open ?? false) && (
-          <div className="deep-dive-overlay" onClick={closeActiveDeepDive}>
-            <div className="deep-dive-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="deep-dive-header">
-                <div className="deep-dive-header-info">
-                  <span className="deep-dive-label">Deep Dive</span>
-                  <span className="deep-dive-case-name">{activeDeepDiveContext.caseItem.case_name}</span>
-                </div>
-                <button type="button" className="deep-dive-close" onClick={closeActiveDeepDive}>✕</button>
-              </div>
+        {activeDeepDiveContext && activeDeepDiveKey && (deepDiveByResult[activeDeepDiveKey]?.open ?? false) && (() => {
+          const { caseItem: c, idx } = activeDeepDiveContext
+          const diveState = deepDiveByResult[activeDeepDiveKey] ?? EMPTY_DEEP_DIVE_STATE
+          const cat = categoryClass(c.category)
+          const topIdxs = topIdxsFromLabels(c.why ?? [])
+          return (
+            <div className="deep-dive-overlay" onClick={closeActiveDeepDive}>
+              <div className="deep-dive-modal deep-dive-modal--two-panel" onClick={(e) => e.stopPropagation()}>
 
-              <div className="deep-dive-messages" ref={deepDiveMessagesRef}>
-                {(deepDiveByResult[activeDeepDiveKey]?.messages ?? []).map((m, mIdx) => (
-                  <div
-                    key={`${m.role}-${mIdx}`}
-                    className={`deep-dive-bubble ${m.role === 'user' ? 'deep-dive-user' : 'deep-dive-assistant'}`}
-                  >
-                    {m.role === 'assistant'
-                      ? <div className="deep-dive-md"><ReactMarkdown>{m.content}</ReactMarkdown></div>
-                      : m.content
-                    }
+                {/* ── LEFT PANEL ─────────────────────────────────── */}
+                <div className="dd-left-panel">
+
+                  {/* Case Header */}
+                  <div className="dd-case-header">
+                    <div className="dd-case-header-top">
+                      <span className={`category-badge badge-${cat} dd-category-badge`}>
+                        {c.category.replace(/_/g, ' ')}
+                      </span>
+                      <span className="dd-similarity-badge">
+                        {(c.similarity * 100).toFixed(0)}% match
+                      </span>
+                      {c.url && (
+                        <a
+                          href={c.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="dd-external-link"
+                        >
+                          See full opinion ↗
+                        </a>
+                      )}
+                    </div>
+                    <h2 className="dd-case-title">{c.case_name}</h2>
                   </div>
-                ))}
-                {deepDiveByResult[activeDeepDiveKey]?.loading && (
-                  <div className="deep-dive-bubble deep-dive-assistant deep-dive-thinking">Thinking…</div>
-                )}
-              </div>
 
-              {deepDiveByResult[activeDeepDiveKey]?.error && (
-                <p className="deep-dive-error">{deepDiveByResult[activeDeepDiveKey]?.error}</p>
-              )}
+                  {/* Dual-Polygon Radar */}
+                  <div className="dd-section dd-radar-section">
+                    <span className="dd-section-label">Semantic Profile</span>
+                    <div className="dd-radar-wrap">
+                      <RadarChart
+                        values={c.dim_activations ?? []}
+                        topIdxs={topIdxs}
+                        size={200}
+                        showLabels
+                        overlayValues={queryDimActivations}
+                      />
+                    </div>
+                    <div className="dd-radar-legend">
+                      <span className="dd-legend-case">&#8212; case</span>
+                      <span className="dd-legend-query">&#8211; &#8211; query</span>
+                    </div>
+                  </div>
 
-              <div className="deep-dive-input-row">
-                <textarea
-                  ref={deepDiveInputRef}
-                  className="deep-dive-input"
-                  value={deepDiveByResult[activeDeepDiveKey]?.draft ?? ''}
-                  placeholder="Ask a follow-up about this case… (Enter to send)"
-                  onChange={(e) => updateDeepDiveDraft(activeDeepDiveContext.caseItem, activeDeepDiveContext.idx, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      sendDeepDiveMessage(activeDeepDiveContext.caseItem, activeDeepDiveContext.idx)
-                    }
-                  }}
-                  rows={2}
-                />
-                <button
-                  type="button"
-                  className="deep-dive-send"
-                  onClick={() => sendDeepDiveMessage(activeDeepDiveContext.caseItem, activeDeepDiveContext.idx)}
-                  disabled={
-                    Boolean(deepDiveByResult[activeDeepDiveKey]?.loading) ||
-                    !(deepDiveByResult[activeDeepDiveKey]?.draft ?? '').trim()
-                  }
-                >
-                  Send
-                </button>
+                  {/* Key Dimensions */}
+                  {c.why && c.why.length > 0 && (
+                    <div className="dd-section dd-dims-section">
+                      <span className="dd-section-label">Key Dimensions</span>
+                      <div className="dim-bars">
+                        {c.why.map((line, k) => {
+                          const { positive, label } = parseDimLine(line)
+                          const dimIdx = dimToRadarIdx(label.replace(/\s*\([^)]*\)\s*$/, '').trim())
+                          const barWidth = dimIdx >= 0 && c.dim_activations
+                            ? Math.round((c.dim_activations[dimIdx] ?? 0) * 100)
+                            : Math.max(0, 100 - k * 22)
+                          return (
+                            <div key={k} className={`dim-bar-row ${positive ? 'dim-pos' : 'dim-neg'}`}>
+                              <span className="dim-sign">{positive ? '+' : '−'}</span>
+                              <div className="dim-track">
+                                <div className="dim-fill" style={{ width: `${barWidth}%` }} />
+                              </div>
+                              <span className="dim-text">{label}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Relevant Excerpt */}
+                  <div className="dd-section dd-snippet-section">
+                    <span className="dd-section-label">
+                      Relevant Excerpt
+                      {c.snippet_is_excerpt && <span className="dd-excerpt-hint"> · TF-IDF aligned</span>}
+                    </span>
+                    <blockquote className="dd-snippet-quote">{c.snippet}</blockquote>
+                  </div>
+
+                  {/* Similar Cases */}
+                  <div className="dd-section dd-similar-section">
+                    <span className="dd-section-label">Similar Cases</span>
+                    {diveState.similarLoading && (
+                      <p className="dd-similar-loading">Loading…</p>
+                    )}
+                    {!diveState.similarLoading && diveState.similarCases.length === 0 && (
+                      <p className="dd-similar-empty">No similar cases found.</p>
+                    )}
+                    {diveState.similarCases.map((sc: SimilarCase) => (
+                      <a
+                        key={sc.case_idx}
+                        href={sc.url || undefined}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`dd-similar-card${sc.url ? ' dd-similar-card--link' : ''}`}
+                      >
+                        <div className="dd-similar-card-meta">
+                          <span className="dd-similar-score">{(sc.similarity * 100).toFixed(0)}% match</span>
+                        </div>
+                        <p className="dd-similar-name">{sc.case_name}</p>
+                      </a>
+                    ))}
+                  </div>
+
+                </div>
+
+                {/* ── RIGHT PANEL ────────────────────────────────── */}
+                <div className="dd-right-panel">
+
+                  <div className="deep-dive-header">
+                    <div className="deep-dive-header-info">
+                      <span className="deep-dive-label">Deep Dive</span>
+                      <span className="deep-dive-case-name">{c.case_name}</span>
+                    </div>
+                    <button type="button" className="deep-dive-close" onClick={closeActiveDeepDive}>✕</button>
+                  </div>
+
+                  <div className="deep-dive-messages" ref={deepDiveMessagesRef}>
+                    {diveState.messages.map((m, mIdx) => (
+                      <div
+                        key={`${m.role}-${mIdx}`}
+                        className={`deep-dive-bubble ${m.role === 'user' ? 'deep-dive-user' : 'deep-dive-assistant'}`}
+                      >
+                        {m.role === 'assistant'
+                          ? <div className="deep-dive-md"><ReactMarkdown>{m.content}</ReactMarkdown></div>
+                          : m.content
+                        }
+                      </div>
+                    ))}
+                    {diveState.loading && (
+                      <div className="deep-dive-bubble deep-dive-assistant deep-dive-thinking">Thinking…</div>
+                    )}
+                  </div>
+
+                  {diveState.error && (
+                    <p className="deep-dive-error">{diveState.error}</p>
+                  )}
+
+                  <div className="deep-dive-input-row">
+                    <textarea
+                      ref={deepDiveInputRef}
+                      className="deep-dive-input"
+                      value={diveState.draft}
+                      placeholder="Ask a follow-up about this case… (Enter to send)"
+                      onChange={(e) => updateDeepDiveDraft(c, idx, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          sendDeepDiveMessage(c, idx)
+                        }
+                      }}
+                      rows={2}
+                    />
+                    <button
+                      type="button"
+                      className="deep-dive-send"
+                      onClick={() => sendDeepDiveMessage(c, idx)}
+                      disabled={Boolean(diveState.loading) || !diveState.draft.trim()}
+                    >
+                      Send
+                    </button>
+                  </div>
+
+                </div>
+
               </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </main>
     </>
   )

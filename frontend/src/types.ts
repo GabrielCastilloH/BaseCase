@@ -72,12 +72,27 @@ export interface CaseRagChatRequest {
   messages: DeepDiveMessage[]
 }
 
+export interface SimilarCase {
+  case_idx: number
+  case_name: string
+  category: string
+  similarity: number
+  url: string
+}
+
+export interface SimilarCasesResponse {
+  similar: SimilarCase[]
+  error?: string
+}
+
 export interface DeepDiveState {
   open: boolean
   loading: boolean
   error: string | null
   messages: DeepDiveMessage[]
   draft: string
+  similarCases: SimilarCase[]
+  similarLoading: boolean
 }
 
 export interface SearchRagRequest {

@@ -617,3 +617,39 @@ def register_routes(app):
     def config():
         use_llm = os.getenv("SPARK_API_KEY") is not None
         return jsonify({"use_llm": use_llm})
+
+    @app.route("/api/similar-cases")
+    def similar_cases():
+        try:
+            case_idx = int(request.args.get("case_idx"))
+        except (TypeError, ValueError):
+            return jsonify({"error": "Invalid case_idx"}), 400
+        if case_idx < 0 or case_idx >= len(CASES):
+            return jsonify({"error": "case_idx out of range"}), 404
+        try:
+            k = max(1, min(10, int(request.args.get("k", "4") or "4")))
+        except (TypeError, ValueError):
+            k = 4
+        target_cat = CASES[case_idx].get("category", "")
+        candidate_indices = [
+            i for i, c in enumerate(CASES)
+            if c.get("category", "") == target_cat and i != case_idx
+        ]
+        if not candidate_indices:
+            candidate_indices = [i for i in range(len(CASES)) if i != case_idx]
+        sims = cosine_similarity(
+            SVD_MATRIX[case_idx].reshape(1, -1),
+            SVD_MATRIX[candidate_indices]
+        ).flatten()
+        top = np.argsort(sims)[::-1][:k]
+        similar = [
+            {
+                "case_idx": candidate_indices[li],
+                "case_name": CASES[candidate_indices[li]]["case_name"],
+                "category": CASES[candidate_indices[li]].get("category", ""),
+                "similarity": round(float(sims[li]), 4),
+                "url": CASES[candidate_indices[li]].get("url", ""),
+            }
+            for li in top
+        ]
+        return jsonify({"similar": similar})
