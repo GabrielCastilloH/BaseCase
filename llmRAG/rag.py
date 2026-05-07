@@ -123,6 +123,9 @@ Rules:
 - Quote or closely paraphrase the opinion at least once.
 - Label any inference that goes beyond what the text directly says.
 - No personal legal advice.
+- This case was retrieved as relevant by the search system. Start from the strongest plausible connection before discussing limits.
+- Avoid saying the query "does not match" unless the opinion text is clearly unrelated or directly contradictory.
+- If alignment is weak, still provide partial relevance: (a) what is supported, (b) what is uncertain or missing, (c) what additional facts would change the analysis.
 
 Use exactly these Markdown headings:
 
@@ -130,10 +133,10 @@ Use exactly these Markdown headings:
 1-2 sentences: what this case is about and its key holding, with one quote if possible.
 
 ## How it applies
-1-3 sentences: the strongest connection to the user's question. Label inferences clearly.
+1-3 sentences: the strongest connection to the user's question first. Label inferences clearly.
 
 ## Limits
-1 sentence: what this case does not cover or establish.
+1 sentence: what this case does not cover or establish, phrased constructively (avoid dismissive wording).
 
 ## Disclaimer
 One sentence: informational only; not legal advice.
@@ -192,6 +195,8 @@ Rules:
 - If support is weak, explicitly label inference vs direct support.
 - Keep answers concise but useful for follow-up discussion.
 - Do not give personal legal advice; this is informational only.
+- Use best-available relevance framing: start with what in the case is useful, then note uncertainty.
+- Avoid repeatedly stating the case is "not a match"; only use that language when there is near-zero topical overlap.
 """.strip()
 
     prompt = [{"role": "system", "content": rag_chat_system}] + sanitized
