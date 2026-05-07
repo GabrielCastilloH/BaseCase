@@ -150,16 +150,35 @@ def _serialize_classification(
     candidates_raw,
     needs_user_category: bool,
 ):
-    candidates = []
+    # Convert raw classifier scores into user-facing relative confidence values.
+    # Classifier decisions still use the original scores/thresholds upstream.
+    valid_scores = []
     for c in candidates_raw or []:
         key = c.get("category")
         if key not in CATEGORY_MAP:
             continue
         score = c.get("normalized_score") if "normalized_score" in c else c.get("score")
         try:
-            score_f = round(float(score), 4)
+            score_f = float(score)
         except (TypeError, ValueError):
             score_f = 0.0
+        valid_scores.append((key, max(0.0, score_f)))
+
+    score_by_key = {}
+    if valid_scores:
+        total = sum(s for _, s in valid_scores)
+        if total > 0:
+            score_by_key = {k: (s / total) for k, s in valid_scores}
+        else:
+            uniform = 1.0 / len(valid_scores)
+            score_by_key = {k: uniform for k, _ in valid_scores}
+
+    candidates = []
+    for c in candidates_raw or []:
+        key = c.get("category")
+        if key not in CATEGORY_MAP:
+            continue
+        score_f = round(float(score_by_key.get(key, 0.0)), 4)
         candidates.append({
             "key": key,
             "label": CATEGORY_LABELS.get(key, key),
@@ -490,11 +509,9 @@ def register_routes(app):
 
         sub_matrix = SVD_MATRIX[indices]
         sims = cosine_similarity(query_svd, sub_matrix).flatten()
-
-        # normalize so scores add up to 1
-        total = sims.sum()
-        if total > 0:
-            sims = sims / total
+        # Rank by raw cosine similarity, but present user-facing "match %"
+        # on a 0..1 scale to avoid negative percentages.
+        display_sims = np.clip(sims, 0.0, 1.0)
 
         top_k = min(10, len(indices))
         top_local = np.argsort(sims)[::-1][:top_k]
@@ -513,7 +530,7 @@ def register_routes(app):
                 "case_idx": global_idx,
                 "case_name": case["case_name"],
                 "category": case.get("category", ""),
-                "similarity": round(float(sims[local_idx]), 4),
+                "similarity": round(float(display_sims[local_idx]), 4),
                 "snippet": snip,
                 "snippet_is_excerpt": is_excerpt,
                 "url": case.get("url", ""),
