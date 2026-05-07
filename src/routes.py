@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import re
 import numpy as np
 from flask import send_from_directory, request, jsonify
 from sklearn.decomposition import TruncatedSVD
@@ -320,14 +321,83 @@ def _trim_chunk_at_word(chunk: str, max_out: int = 380) -> str:
     return excerpt.rstrip() + "…"
 
 
+def _query_terms_for_overlap(q: str):
+    return {
+        t for t in re.findall(r"[a-z0-9]+", (q or "").lower())
+        if len(t) >= 3
+    }
+
+
+def _candidate_passages(text: str):
+    """
+    Build readable passage candidates from paragraph blocks and sentence windows.
+    """
+    t = (text or "").strip()
+    if not t:
+        return []
+
+    candidates = []
+    seen = set()
+
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n+", t) if p.strip()]
+    for p in paragraphs:
+        if 80 <= len(p) <= 700:
+            norm = " ".join(p.split())
+            if norm not in seen:
+                seen.add(norm)
+                candidates.append(norm)
+
+    # Sentence segmentation heuristic that works reasonably for legal prose.
+    sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"\'])", t)
+    sentences = [s.strip() for s in sentences if s.strip()]
+
+    for i in range(len(sentences)):
+        for k in (1, 2, 3):
+            j = i + k
+            if j > len(sentences):
+                break
+            chunk = " ".join(sentences[i:j]).strip()
+            if len(chunk) < 60 or len(chunk) > 700:
+                continue
+            norm = " ".join(chunk.split())
+            if norm not in seen:
+                seen.add(norm)
+                candidates.append(norm)
+
+    return candidates
+
+
+def _excerpt_quality_score(passage: str):
+    """
+    Readability prior in [0, 1] used as a gentle tie-breaker.
+    """
+    p = (passage or "").strip()
+    if not p:
+        return 0.0
+    n = len(p)
+    if n < 90:
+        length_score = n / 90.0
+    elif n <= 420:
+        length_score = 1.0
+    elif n <= 700:
+        length_score = max(0.35, 1.0 - ((n - 420) / 500.0))
+    else:
+        length_score = 0.25
+
+    citation_hits = len(re.findall(r"\b\d+\s+[A-Z][A-Za-z.\s]{0,20}\s+\d+\b", p))
+    heavy_citation_penalty = min(0.2, 0.04 * citation_hits)
+
+    return max(0.0, min(1.0, length_score - heavy_citation_penalty))
+
+
 def _best_snippet_for_query(
     text: str,
     query_tfidf,
+    query_text: str,
     *,
-    window_chars: int = 420,
-    stride: int = 140,
+    min_out: int = 180,
     max_out: int = 380,
-    min_cos: float = 0.001,
+    min_cos: float = 0.008,
 ):
     """
     Pick the text window whose TF-IDF vector is most similar to the query.
@@ -338,26 +408,57 @@ def _best_snippet_for_query(
     if not t:
         return "", False
 
-    windows = list(_iter_text_windows(t, window_chars, stride))
-    if not windows:
+    candidates = _candidate_passages(t)
+    if not candidates:
         return _sentence_aware_prefix(t, max_out), False
 
-    chunk_texts = [w[1] for w in windows]
-    if not chunk_texts:
-        return _sentence_aware_prefix(t, max_out), False
-
-    W = VECTORIZER.transform(chunk_texts)
+    W = VECTORIZER.transform(candidates)
     sims = cosine_similarity(query_tfidf, W).flatten()
-    best_i = int(np.argmax(sims))
-    best_cos = float(sims[best_i])
+    q_terms = _query_terms_for_overlap(query_text)
 
-    if best_cos < min_cos or not np.isfinite(best_cos):
+    legal_cues = (
+        "held", "holding", "court", "because", "therefore", "summary judgment",
+        "negligence", "duty", "damages", "discrimination", "copyright", "liability",
+    )
+
+    scored = []
+
+    for i, cand in enumerate(candidates):
+        cos = float(sims[i]) if i < len(sims) else 0.0
+        c_terms = _query_terms_for_overlap(cand)
+        overlap = (
+            (len(q_terms & c_terms) / max(len(q_terms), 1))
+            if q_terms else 0.0
+        )
+        cue_bonus = 0.06 if any(cue in cand.lower() for cue in legal_cues) else 0.0
+        quality = _excerpt_quality_score(cand)
+        score = (0.64 * max(0.0, cos)) + (0.26 * overlap) + (0.10 * quality) + cue_bonus
+
+        scored.append((score, i, cos, overlap))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    if not scored:
         return _sentence_aware_prefix(t, max_out), False
 
-    start, chunk = windows[best_i]
-    body = _trim_chunk_at_word(chunk, max_out)
-    prefix = "… " if start > 0 else ""
-    return prefix + body, True
+    best_score, best_idx, best_cos, best_overlap = scored[0]
+
+    # Prefer a longer candidate when relevance is close, to avoid ultra-short excerpts.
+    if len(t) >= min_out:
+        for score, i, cos, overlap in scored[:8]:
+            cand_len = len(candidates[i])
+            if cand_len >= min_out and score >= best_score * 0.82:
+                best_score, best_idx, best_cos, best_overlap = score, i, cos, overlap
+                break
+
+    # Low-confidence fallback: prefer clean prefix over noisy weak match.
+    if (best_cos < min_cos and best_overlap < 0.12) or not np.isfinite(best_cos):
+        return _sentence_aware_prefix(t, max_out), False
+
+    body = _trim_chunk_at_word(candidates[best_idx], max_out)
+    if len(body) < min_out and len(t) > len(body):
+        # Final guard: show a fuller readable excerpt when best match is too short.
+        body = _sentence_aware_prefix(t, max_len=max_out)
+    return body, True
 
 
 def register_routes(app):
@@ -523,6 +624,7 @@ def register_routes(app):
             snip, is_excerpt = _best_snippet_for_query(
                 case.get("text") or "",
                 q_tfidf_snippet,
+                effective_q,
             )
             doc_svd = np.asarray(SVD_MATRIX[global_idx]).reshape(-1)
             why_hit = _per_hit_latent_overlap_labels(query_svd[0], doc_svd, top_n=3)
